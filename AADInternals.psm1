@@ -5,6 +5,9 @@ Add-Type -AssemblyName System.Windows.Forms         -ErrorAction SilentlyContinu
 Add-Type -AssemblyName System.Web                   -ErrorAction SilentlyContinue
 Add-Type -AssemblyName System.Web.Extensions        -ErrorAction SilentlyContinue
 
+# Set supported TLS methods
+[Net.ServicePointManager]::SecurityProtocol = "Tls, Tls11, Tls12, Ssl3"
+
 # Print the welcome message
 $manifest = Import-PowerShellDataFile "$PSScriptRoot\AADInternals.psd1"
 $version = $manifest.ModuleVersion
@@ -17,17 +20,18 @@ $logo=@"
  / ___ |/ ___ |/ /_/ _/ // / / / /_/  __/ /  / / / / /_/ / (__  ) 
 /_/  |_/_/  |_/_____/___/_/ /_/\__/\___/_/  /_/ /_/\__,_/_/____/  
   
- v$version by @NestoriSyynimaa - Cloud Identity Summit 2020 edition
+ v$version (Teams Nation edition) by @DrAzureAD (Nestori Syynimaa)
 "@
 
 Write-Host $logo -ForegroundColor Yellow
 
 # Load the .ps1 scripts
 $scripts = @(Get-ChildItem -Path $PSScriptRoot\*.ps1 -ErrorAction SilentlyContinue)
-
+$c = 0
 foreach ($script in $scripts) {
+    Write-Progress -Activity "Importing script" -Status $script -PercentComplete (($c++/$scripts.count)*100) 
     try {
-        Write-Verbose "Importing $($import.FullName)"
+													 
         . $script.FullName
     } catch {
         Write-Error "Failed to import $($script.FullName): $_"
@@ -36,15 +40,21 @@ foreach ($script in $scripts) {
 
 # Export functions
 $functions=@(
+    # ADFS.ps1
+    "Export-ADFSCertificates"
+    "Export-ADFSConfiguration"
+    "Export-ADFSEncryptionKey"
+    "Set-ADFSConfiguration"
+    "Get-ADFSPolicyStoreRules"
+    "Set-ADFSPolicyStoreRules"
+
     # ADFS_utils.ps1
-    "Export-ADFSSigningCertificate"
-    "Export-ADFSEncryptionCertificate"
     "New-ADFSSelfSignedCertificates"
     "Restore-ADFSAutoRollover"
     "Update-ADFSFederationSettings"
-
-    # AccessToken_utils.ps1
-    "Get-LoginInformation"
+    "Get-ADFSConfiguration"
+    
+    # AccessToken.ps1
     "Get-AccessTokenForAADGraph"
     "Get-AccessTokenForMSGraph"
     "Get-AccessTokenForPTA"
@@ -59,6 +69,9 @@ $functions=@(
     "Get-AccessTokenForIntuneMDM"
     "Get-AccessTokenForCloudShell"
     "Get-AccessTokenForTeams"
+    
+    # AccessToken_utils.ps1
+    "Get-LoginInformation"
     "Read-AccessToken"
     "Get-EndpointInstances"
     "Get-EndpointIps"
@@ -72,6 +85,8 @@ $functions=@(
     "Get-TenantDetails"
     "Get-Devices"
     "Get-UserDetails"
+    "Get-ServicePrincipals"
+    "Get-ConditionalAccessPolicies"
 
     # ProvisioningAPI.ps1
     "Set-DomainAuthentication"
@@ -91,7 +106,6 @@ $functions=@(
     "Set-ADSyncEnabled"
 
     #FederatedIdentityTools.ps1
-    "Get-Certificate"
     "New-SAMLToken"
     "New-SAML2Token"
     "Get-ImmutableID"
@@ -114,6 +128,7 @@ $functions=@(
     "Get-KerberosDomainSyncConfig"
     "Get-WindowsCredentialsSyncConfig"
     "Get-SyncDeviceConfiguration"
+    "Join-OnPremDeviceToAzureAD"
 
     # AzureManagementAPI_utils.ps1
     "Get-AccessTokenForAADIAMAPI"
@@ -122,6 +137,7 @@ $functions=@(
     # AzureManagementAPI.ps1
     "New-GuestInvitation"
     "Get-AzureInformation"
+    "Get-AADConnectStatus"
 
     # ActiveSync.ps1
     "Get-EASAutoDiscover"
@@ -136,6 +152,8 @@ $functions=@(
 
     # PSRP.ps1
     "Get-MobileDevices"
+    "Get-UnifiedAuditLogSettings"
+    "Set-UnifiedAuditLogSettings"
 
     # AADSyncSettings.ps1
     "Get-SyncCredentials"
@@ -215,6 +233,10 @@ $functions=@(
     "Invoke-AzureVMScript"
     "Get-AzureVMRdpSettings"
     "Get-AzureTenants"
+    "Get-AzureDiagnosticSettingsDetails"
+    "Set-AzureDiagnosticSettingsDetails"
+    "Get-AzureDiagnosticSettings"
+    "Remove-AzureDiagnosticSettings"
 
     # MSGraphAPI.ps1
     "Get-AzureSignInLog"
@@ -224,6 +246,12 @@ $functions=@(
     "Set-TenantGuestAccess"
     "Enable-TenantMsolAccess"
     "Disable-TenantMsolAccess"
+    "Get-RolloutPolicies"
+    "Get-RolloutPolicyGroups"
+    "Add-RolloutPolicyGroups"
+    "Remove-RolloutPolicyGroups"
+    "Remove-RolloutPolicy"
+    "Set-RolloutPolicy"
 
     # KillChain.ps1
     "Invoke-UserEnumerationAsOutsider"
@@ -248,6 +276,7 @@ $functions=@(
     "Set-DeviceRegAuthMethods"
     "Get-DeviceTransportKey"
     "Set-DeviceTransportKey"
+    "New-BulkPRTToken"
 
     # MDM.ps1
     "Join-DeviceToIntune"
@@ -260,6 +289,7 @@ $functions=@(
 
     # CommonUtils.ps1
     "Get-Error"
+    "New-Certificate"
 
     # Teams.ps1
     "Get-SkypeToken"
@@ -269,9 +299,16 @@ $functions=@(
     "Send-TeamsMessage"
     "Get-TeamsMessages"
     "Remove-TeamsMessages"
+    "Set-TeamsMessageEmotion"
 
+    # DRS_Utils.ps1
+    "Get-ADUserNTHash"
+    "Get-ADUserThumbnailPhoto"
+    "Get-DesktopSSOAccountPassword"
 )
+$c = 0
 foreach($function in $functions)
 {
+    Write-Progress -Activity "Exporting function" -Status $function -PercentComplete (($c++/$functions.count)*100)
     Export-ModuleMember -Function $function
 }

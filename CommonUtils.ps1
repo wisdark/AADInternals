@@ -140,16 +140,23 @@ function Convert-OidToBytes
         {
             [int]$digit = $digits[$pos]
 
-            # Double byte integer needed 
-            if($digit -gt 127)
+           
+            if($digit -gt 127) # Multiple bytes needed
             {
-                # Move $b1 seven bits to right and switch the first bit on
-                $b1 = (($digit -shr 7) -bor 0x80)
-                # Keep only the "first" 8 bits by nullifying others
-                $b2 = ($digit -band 0xFF)
+                $mbytes=@()
+                $mbytes += [byte]($digit -band 0x7f)
 
-                $bytes += [byte]$b1
-                $bytes += [byte]$b2
+                while($digit -gt 127)
+                {
+                    $digit = $digit -shr 7
+
+                    $mbytes += [byte](($digit -band 0x7f) -bor 0x80)
+                }
+
+                for($a = $mbytes.Count -1 ; $a -ge 0 ; $a--)
+                {
+                    $bytes += [byte]$mbytes[$a]
+                }
             }
             else
             {
@@ -170,11 +177,17 @@ function Convert-BytesToOid
 
     [cmdletbinding()]
     Param(
-        [Parameter(Mandatory=$True,ValueFromPipeline)]
-        [byte[]]$Bytes
+        [Parameter(ParameterSetName = "Bytes",Mandatory=$True,ValueFromPipeline)]
+        [byte[]]$Bytes,
+        [Parameter(ParameterSetName = "String",Mandatory=$True)]
+        [String]$ByteString
     )
     Process
     {
+        if($ByteString)
+        {
+            $Bytes = Convert-HexToByteArray -HexString ($ByteString.Replace("0x","").Replace(",","").Replace(" ",""))
+        }
         $pos = 0
 
         # Check whether we have DER tag. If so, skip the first 2 bytes
@@ -189,20 +202,23 @@ function Convert-BytesToOid
         # Calculate the rest
         for($pos+=1; $pos -lt $Bytes.Count; $pos++)
         {
-            # Double byte integer if first bit is set
-            if(($Bytes[$pos] -band 0x80) -gt 0)
+            $digit = 0
+            $mbyte = @()
+            while (($Bytes[$pos] -band 0x80) -gt 0)
             {
-                $b1 = $Bytes[$pos]
-                $b2 = $Bytes[$pos+1]
-
-                # Add the last bit of $b1 to the first bit of $b2 (shift bits one step to right)
-                $b2 = $b2 -bor (($b1 -band 1) -shl 7)
-                # Switch the first bit of $b1 to 0 and one bit left
-                $b1 = ($b1 -band 0x7F) -shr 1
-
-                # Calculate the digit
-                $digit = [int]($b1 * 256  + $b2)
+                $mByte+=($Bytes[$pos])
                 $pos++
+            }
+            if($mByte.Count -gt 0)
+            {
+                $mByte += $Bytes[$pos]
+                for($a = 1; $a -le $mByte.Count ; $a++)
+                {
+                    $value = $mByte[$a-1] -band 0x7f # Strip the first byte
+                    $value *= [math]::pow(128, $mByte.Count-$a)
+                    $digit += $value
+
+                }
             }
             else
             {
@@ -216,7 +232,7 @@ function Convert-BytesToOid
     }
 }
 
-# Load .pfx certificate
+# Loads X509 certificate from .pfx file.
 function Load-Certificate
 {
 <#
@@ -231,9 +247,12 @@ function Load-Certificate
 
     .Parameter Password
     The password of the .pfx file
+
+    .Parameter Exportable
+    Whether the private key should be exportable or not.
     
     .Example
-    PS C:\>Get-AADIntCertificate -FileName "MyCert.pfx" -Password -Password "mypassword"
+    PS C:\>Load-AADIntCertificate -FileName "MyCert.pfx" -Password -Password "mypassword"
 
 #>
     [cmdletbinding()]
@@ -576,3 +595,645 @@ Function Get-Error
     }
 }
 
+# Create a new self-signed certificate
+# Jan 31st 2021
+function New-Certificate
+{
+<#
+    .SYNOPSIS
+    Creates a new self signed certificate.
+
+    .DESCRIPTION
+    Creates a new self signed certificate for the given subject name and returns it as System.Security.Cryptography.X509Certificates.X509Certificate2 or exports directly to .pfx and .cer files.
+    The certificate is valid for 100 years.
+
+    .Parameter SubjectName
+    The subject name of the certificate, MUST start with CN=
+
+    .Parameter Export
+    Export the certificate (PFX and CER) instead of returning the certificate object. The .pfx file does not have a password.
+  
+    .Example
+    PS C:\>$certificate = New-AADIntCertificate -SubjectName "CN=MyCert"
+
+    .Example
+    PS C:\>$certificate = New-AADIntCertificate -SubjectName "CN=MyCert"
+
+    PS C:\>$certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx) | Set-Content MyCert.pfx -Encoding Byte
+
+    .Example
+    PS C:\>$certificate = New-AADIntCertificate -SubjectName "CN=MyCert"
+
+    PS C:\>$certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert) | Set-Content MyCert.cer -Encoding Byte
+
+    .Example
+    PS C:\>New-AADIntCertificate -SubjectName "CN=MyCert" -Export
+
+    Certificate successfully exported:
+      CN=MyCert.pfx
+      CN=MyCert.cer
+#>
+    [cmdletbinding()]
+
+    param(
+        [parameter(Mandatory=$true,ValueFromPipeline)]
+        [ValidatePattern("[c|C][n|N]=.+")] # Must start with CN=
+        [String]$SubjectName,
+        [Switch]$Export
+    )
+    Process
+    {
+        # Create a private key
+        $rsa = [System.Security.Cryptography.RSA]::Create(2048)
+
+        # Initialize the Certificate Signing Request object
+        $req = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new($SubjectName, $rsa, [System.Security.Cryptography.HashAlgorithmName]::SHA256,[System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+        $req.CertificateExtensions.Add([System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]::new($true,$false,0,$true))
+        $req.CertificateExtensions.Add([System.Security.Cryptography.X509Certificates.X509SubjectKeyIdentifierExtension]::new($req.PublicKey,$false))
+
+        # Create a self-signed certificate
+        $selfSigned = $req.CreateSelfSigned((Get-Date).ToUniversalTime().AddMinutes(-5),(Get-Date).ToUniversalTime().AddYears(100))
+        
+
+        # Store the private key to so that it can be exported
+        $cspParameters = [System.Security.Cryptography.CspParameters]::new()
+        $cspParameters.ProviderName =    "Microsoft Enhanced RSA and AES Cryptographic Provider"
+        $cspParameters.ProviderType =    24
+        $cspParameters.KeyContainerName ="AADInternals"
+            
+        # Set the private key
+        $privateKey = [System.Security.Cryptography.RSACryptoServiceProvider]::new(2048,$cspParameters)
+        $privateKey.ImportParameters($rsa.ExportParameters($true))
+        $selfSigned.PrivateKey = $privateKey
+
+        if($Export)
+        {
+            $selfSigned.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx)  | Set-Content "$SubjectName.pfx" -Encoding Byte
+            $selfSigned.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert) | Set-Content "$SubjectName.cer" -Encoding Byte
+
+            # Print out information
+            Write-Host "Certificate successfully exported:"
+            Write-Host "  $SubjectName.pfx"
+            Write-Host "  $SubjectName.cer"
+        }
+        else
+        {
+            return $selfSigned
+        }
+    }
+}
+
+# Creates a new random SID
+# Feb 12th 2021
+function New-RandomSID
+{
+    [cmdletbinding()]
+
+    param(
+        [parameter(Mandatory=$False)]
+        [ValidateSet(0,1,2,3,4,5,7,9,11,12,15,16,18)]
+        [int]$IdentifierAuthority=5,
+        [parameter(Mandatory=$False)]
+        [ValidateSet(18,21,32,64,80,82,83,90,96)]
+        [int]$SubAuthority=21
+    )
+    Process
+    {
+        # Create a random SID
+        # ref: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-azod/ecc7dfba-77e1-4e03-ab99-114b349c7164
+        # ref: https://en.wikipedia.org/wiki/Security_Identifier
+
+        # Identifier Authorities:
+        # 0  = Null Authority
+        # 1  = World Authority
+        # 2  = Local Authority
+        # 3  = Creator Authority
+        # 4  = Non-unique Authority
+        # 5  = NT Authority                 NT AUTHORITY\
+        # 7  = Internet$                    Internet$\
+        # 9  = Resource Manager Authority
+        # 11 = Microsoft Account Authority  MicrosoftAccount\
+        # 12 = Azure Active Directory       AzureAD\
+        # 15 = Capability SIDS
+        # 16 =                              MandatoryLabel\
+        # 18 =                              Asserted Identity
+
+        # Sub Authorities:
+        # 18 = LocalSystem
+        # 21 = Domain
+        # 32 = Users
+        # 64 = Authentication
+        # 80 = NT Service
+        # 82 = IIS AppPool
+        # 83 = Virtual Machines
+        # 90 = Window Manager
+        # 96 = Font Driver
+
+        return "S-1-$IdentifierAuthority-$SubAuthority-$(Get-Random -Minimum 1 -Maximum 0x7FFFFFFF)-$(Get-Random -Minimum 1 -Maximum 0x7FFFFFFF)-$(Get-Random -Minimum 1 -Maximum 0x7FFFFFFF)-$(Get-Random -Minimum 1000 -Maximum 9999)"
+    }
+}
+
+# Returns RCA for given key and data
+function Get-RC4{
+    Param(
+        [Byte[]]$Key,
+        [Byte[]]$Data
+    )
+    Process
+    {
+        $nk = New-Object byte[] 256
+        $s = New-Object byte[] 256
+
+        for ($i = 0; $i -lt 256; $i++)
+        {
+            $nk[$i] = $Key[($i % $Key.Length)]
+            $s[$i] = [byte]$i
+        }
+
+        $j = 0
+
+        for ($i = 0; $i -lt 256; $i++)
+        {
+            $j = ($j + $s[$i] + $nk[$i]) % 256
+
+            $swap = $s[$i]
+            $s[$i] = $s[$j]
+            $s[$j] = $swap
+        }
+
+
+        $output = New-Object byte[] ($Data.Length)
+
+        $i = 0
+        $j = 0
+
+        for ($c = 0; $c -lt $data.Length; $c++)
+        {
+            $i = ($i + 1) % 256
+            $j = ($j + $s[$i]) % 256
+
+            $swap = $s[$i];
+            $s[$i] = $s[$j];
+            $s[$j] = $swap;
+
+            $k = $s[(($s[$i] + $s[$j]) % 256)]
+
+            $keyed = $data[$c] -bxor $k
+
+            $output[$c] = [byte]$keyed
+        }
+
+        return $output
+
+    }
+}
+
+
+function Parse-Asn1
+{
+    Param(
+        [Parameter(Mandatory=$True)]
+        [byte[]]$Data,
+        [Parameter(Mandatory=$False)]
+        [int]$Pos=0,
+        [Parameter(Mandatory=$False)]
+        [int]$Level=0
+    )
+    Begin
+    {
+        
+    }
+    Process
+    {
+        # Must be initialized 
+        [int]$p =      $pos
+        [int]$sBytes = 0
+        [int]$size =   0
+
+
+        # Get the tag
+        [int]$tag = $Data[$p]
+        
+        if(($Data[$p+1] -shr 4) -eq 8) # Get the size
+        {
+            # Multibyte
+            $sBytes = $Data[$p+1] -band 0x0F
+            
+            for($a = 1 ; $a -le $sBytes; $a++)
+            {
+                $size += ($Data[$p+1+$a] * [Math]::Pow(256, $sBytes-$a))
+            }
+            
+            $tSize = $size + 2 +$sBytes
+        }
+        else
+        {
+            $size = $Data[$p+1]
+            $tSize = $size + 2
+        }
+
+        
+        # Calculate start and end
+        $start = $p
+        $end =   $p + $tSize - 1
+
+        # Move to the start of the data        
+        $p += 2 + $sBytes
+
+        if(($tag -shr 4) -eq 0x06) # Application element
+        { 
+                $appNum = $tag -band 0x0F
+                $tType = "APP #$appNum"
+
+                $multiValue = $true
+        }
+        elseif(($tag -shr 4) -eq 0x0A) # Sequence element
+        { 
+                $seqNum = $tag -band 0x0F
+                $tType = "SEQ #$seqNum"
+
+                $multiValue = $true
+        }
+        elseif($tag -in 0x10, 0x30) 
+        {
+                $tType = "SEQUENCE"
+                $multiValue = $true
+        } 
+        elseif($tag -in 0x11, 0x31) 
+        {
+                $tType = "SET"
+                $multiValue = $true
+        }
+        else
+        {
+            $multiValue = $false
+            
+            switch($tag)
+            {
+                0x01 {
+                        $tType = "BOOLEAN"
+                        $tData = $Data[$p-1] -ne 0x00
+                        $tValue = $tData
+
+                        break
+                }
+                0x02 {
+                        $tType = "INTEGER" 
+                        $tData = 0
+                        for($a = 1 ; $a -le $size; $a++)
+                        {
+                            $tData += $Data[$p-1+$a] * [Math]::Pow(256, $size-$a)
+                        }
+                        $tValue = $tData
+                        
+                        break
+                        }
+                0x03 {
+                        $tType = "BIT STRING"
+                        $tData = $Data[$p..$($p+$size-1)]
+                        $tValue = Convert-ByteArrayToHex -Bytes $tData
+                        
+                        break
+                        }
+                0x04 {
+                        $tType = "OCTET STRING"
+                        Write-Verbose "$(("  " * $level ))$tType ($size) $tValue"
+                        $tData = $Data[$p..$($p+$size-1)]
+                        
+                        break
+                        } 
+                0x05 {
+                        $tType = "NULL"
+                        $tData = $null
+                        $tValue = $tData
+
+                        break
+                        }
+                0x06 {
+                        $tType = "OBJECT IDENTIFIER"
+                        $tData = Convert-BytesToOid -Bytes $Data[$p..$($p+$size-1)]
+                        $tValue = $tData
+
+                        break
+                        }
+                0x0A {
+                        $tType = "ENUMERATED"
+                        $tData = 0
+                        for($a = 1 ; $a -le $size; $a++)
+                        {
+                            $tData += $Data[$p-1+$a] * [Math]::Pow(256, $size-$a)
+                        }
+                        $tValue = $tData
+                        
+                        break
+                        }
+                0x13 {
+                        $tType = "PrintableString"
+                        $tData = [text.encoding]::ASCII.GetString($Data[$p..$($p+$size-1)])
+                        $tValue = $tData
+                        
+                        break
+                        }
+                0x16 {
+                        $tType = "IA5String"
+                        $tData = [text.encoding]::ASCII.GetString($Data[$p..$($p+$size-1)])
+                        $tValue = $tData
+                        
+                        break
+                        }
+                0x18 {
+                        $tType = "DATE TIME"
+                        $dStr = [text.encoding]::UTF8.GetString($Data[$p..$($p+$size-1)])
+
+                        $yyyy = [int]$dStr.Substring(0,4)
+                        $MM   = [int]$dStr.Substring(4,2)
+                        $dd   = [int]$dStr.Substring(6,2)
+                        $hh   = [int]$dStr.Substring(8,2)
+                        $min  = [int]$dStr.Substring(10,2)
+                        $ss   = [int]$dStr.Substring(12,2)
+
+                        #$tData = Get-Date -Year $yyyy -Month $MM -Day $dd -Hour $hh -Minute $min -Second $ss 
+                        $tData = [DateTime]"$($yyyy)-$('{0:D2}' -f $MM)-$('{0:D2}' -f $dd)T$('{0:D2}' -f $hh):$('{0:D2}' -f $mm):$('{0:D2}' -f $ss)Z" 
+
+                        $tValue = $tData
+
+                        break
+                        }
+                0x1B {
+                        $tType = "GENERAL STRING"
+                        $tData = [text.encoding]::UTF8.GetString($Data[$p..$($p+$size-1)])
+                        $tValue = $tData
+
+                        break
+                        }
+                0x7B {
+                        $tType = "EncAPRepPart"
+                        Write-Verbose "$(("  " * $level ))$tType ($size) $tValue"
+                        try
+                        {
+                            $tData = Parse-Asn1 -Data $Data[$p..$($p+$size-1)] -Level ($Level+1)
+                        }
+                        catch
+                        {
+                            $tData = $Data[$p..$($p+$size-1)]
+                        }
+                        break
+                    }
+                0x7E {
+                        $tType = "KRB_ERROR"
+                        Write-Verbose "$(("  " * $level ))$tType ($size) $tValue"
+                        try
+                        {
+                            $tData = Parse-Asn1 -Data $Data[$p..$($p+$size-1)] -Level ($Level+1)
+                        }
+                        catch
+                        {
+                            $tData = $Data[$p..$($p+$size-1)]
+                        }
+                        break
+                        
+                    }
+                0x80 {
+                        $tType = "APPSPECIFIC"
+                        $tData = $Data[$p..$($p+$size-1)]
+                        
+                        break
+                        
+                    }
+                
+                default {
+
+                            Throw "Unknown TAG 0x$('{0:X}' -f  $tag) ($size)"
+                        }       
+            }
+        }
+
+        if($Size -eq 0)
+        {
+            $tData =  $null
+            $tValue = $null
+        }
+
+        if(($tag -ne 0x04) -and (($tag -shr 4) -ne 0x07))
+        {
+            Write-Verbose "$(("  " * $level ))$tType ($size) $tValue"
+        }
+
+        if($multiValue)
+        {
+            $tData = @()
+            While($p -lt $end)
+            {
+
+                $element = Parse-Asn1 -Data $Data -Pos $p -Level ($Level+1) 
+
+                $p += $element.Size
+                $tData += $element
+                
+                
+            }
+        
+        }
+        
+                
+
+        return New-Object psobject -Property @{ "Type" = $tType; "Data" = $tData ; "DataLength" = $size; "Size" = $tSize}
+    }
+}
+
+# Encodes object to Asn1 encoded byte array
+# Mar 26th 2021
+function Encode-Asn1
+{
+    Param(
+        [Parameter(Mandatory=$True)]
+        [psobject]$Data,
+        [Parameter(Mandatory=$False)]
+        [int]$Level = 0
+    )
+    Begin
+    {
+        
+    }
+    Process
+    {
+        $attributes = $Data | get-member | where MemberType -eq "NoteProperty" | select Name
+        if(!$attributes -or (!"Data","Type" -in $attributes))
+        {
+            Throw "Data object doesn't have Data and Type attributes"
+        }
+
+        
+        Write-Verbose "$(("  " * $level ))$($Data.Type)"
+
+        switch($Data.Type)
+        {
+            
+
+            {$_.startsWith("APP #")}{
+                    $appNum = [byte]$_.Split("#")[1]
+                    $appNum += 0x60
+
+                    $returnValues = @()
+                    foreach($value in $Data.Data)
+                    {
+                        $returnValues += Encode-Asn1 -Data $value -Level ($Level+1)
+                    }
+
+                    if($returnValues)
+                    {
+                        return Add-DERTag -Tag $appNum -Data $returnValues
+                    }
+
+                    break
+                }
+            {$_.startsWith("SEQ #")}{
+                    $seqNum = [byte]$_.Split("#")[1]
+                    $seqNum += 0xA0
+
+                    $returnValues = @()
+                    foreach($value in $Data.Data)
+                    {
+                        $returnValues += Encode-Asn1 -Data $value -Level ($Level+1)
+                    }
+
+                    if($returnValues)
+                    {
+                        return Add-DERTag -Tag $seqNum -Data $returnValues
+                    }
+
+                    break
+                }
+
+            "SEQUENCE" {
+
+                    $returnValues = @()
+                    foreach($value in $Data.Data)
+                    {
+                        $returnValues += Encode-Asn1 -Data $value -Level ($Level+1)
+                    }
+
+                    if($returnValues)
+                    {
+                        return Add-DERSequence -Data $returnValues
+                    }
+
+                    break
+                }
+    
+            "SET" {
+                    $returnValues = @()
+                    foreach($value in $Data.Data)
+                    {
+                        $returnValues += Encode-Asn1 -Data $value
+                    }
+
+                    if($returnValues)
+                    {
+                        return Add-DERSet -Data $returnValues
+                    }
+                    
+                    break
+                }
+            "BOOLEAN" {
+                    return Add-DERBoolean -Value $Data.Data
+
+                    break
+                }
+            "INTEGER" {
+                    return Add-DERInteger -Data ([byte]$Data.Data)
+
+                    break
+                }
+            "ENUMERATED" {
+                    return Add-DERInteger -Data ([byte]$Data.Data)
+
+                    break
+                }
+            "BIT STRING" {
+                    return Add-DERBitString -Data $Data.Data
+
+                    break
+                }
+            "OCTET STRING" {
+                    if($Data.Data -is [System.Array])
+                    {
+                        return Add-DEROctetString -Data $Data.Data
+                    }
+                    else
+                    {
+                        return Add-DEROctetString -Data (Encode-Asn1 -Data $Data.Data -Level ($Level+1))
+                    }
+
+                    break
+                }
+            "NULL" {
+                    return Add-DERNull
+
+                    break
+                }
+            "OBJECT IDENTIFIER" {
+                    return Add-DERObjectIdentifier -ObjectIdentifier $Data.Data
+
+                    break
+                }
+            "GENERAL STRING" {
+                    return Add-DERUtf8String -Text $Data.Data
+
+                    break
+                }
+            "DATE TIME" {
+                    return Add-DERDate -Date $Data.Data
+
+                    break
+                }
+            default {
+                Throw "Unknown type: $_"
+                }
+            
+        }
+    }
+}
+
+# Returns the given number random bytes
+function Get-RandomBytes
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [int]$Bytes
+    )
+    Process
+    {
+        $returnBytes = New-Object byte[] $Bytes
+        
+
+        for($c = 0; $c -lt $Bytes ; $c++)
+        {
+            $returnBytes[$c] = Get-Random -Minimum 0 -Maximum 0xFF
+        }
+
+        return $returnBytes
+    }
+}
+
+# Computes an SHA1 digest for the given data
+function Get-Digest
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]$Data
+    )
+    Process
+    {
+        
+        # Compute SHA1 digest        
+        $SHA1 =   [System.Security.Cryptography.SHA1Managed]::Create()
+        $digest = $SHA1.ComputeHash([text.encoding]::UTF8.GetBytes($Data))
+        
+        $SHA1.Dispose()
+
+        return $digest
+    }
+}

@@ -254,6 +254,8 @@ function Invoke-ReconAsGuest
     Non-admin users restricted?  True
     Users can register apps?     True
     Directory access restricted? False
+    Guest access:                Normal
+    CA policies:                 7
 
     PS C:\>$results.allowedActions
 
@@ -276,7 +278,7 @@ function Invoke-ReconAsGuest
     Process
     {
         # Get access token from cache
-        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net/" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
 
         # Get the list of tenants the user has access to
         $tenants = Get-AzureTenants -AccessToken $AccessToken
@@ -302,6 +304,12 @@ function Invoke-ReconAsGuest
         # Get the tenant information
         $tenantInformation = Get-AzureInformation -Tenant $tenant
 
+        # Guest access
+        if(!$tenantInformation.authorizationPolicy)
+        {
+            $tenantInformation.guestAccess = "unknown"
+        }
+
         # Print out some relevant information
         Write-Host "Tenant brand:                $($tenantInformation.displayName)"
         Write-Host "Tenant name:                 $($tenantInformation.domains | where isInitial -eq "True" | select -ExpandProperty id)"
@@ -311,6 +319,8 @@ function Invoke-ReconAsGuest
         Write-Host "Non-admin users restricted?  $($tenantInformation.restrictNonAdminUsers)"
         Write-Host "Users can register apps?     $($tenantInformation.usersCanRegisterApps)"
         Write-Host "Directory access restricted? $($tenantInformation.restrictDirectoryAccess)"
+        Write-Host "Guest access:                $($tenantInformation.guestAccess)"
+        Write-Host "CA policies:                 $($tenantInformation.conditionalAccessPolicy.Count)" 
 
         # Return
         return $tenantInformation
@@ -371,7 +381,7 @@ function Invoke-UserEnumerationAsGuest
     Process
     {
         # Get access token from cache
-        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net/" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
 
         # Get the list of tenants the user has access to
         Write-Verbose "Getting list of user's tenants.."
@@ -396,7 +406,7 @@ function Invoke-UserEnumerationAsGuest
         $tenant =     $tenantInfo.Id
 
         # Create a new AccessToken for graph.microsoft.com
-        $refresh_token = $script:refresh_tokens["d3590ed6-52b3-4102-aeff-aad2292ab01c-https://management.core.windows.net"]
+        $refresh_token = $script:refresh_tokens["d3590ed6-52b3-4102-aeff-aad2292ab01c-https://management.core.windows.net/"]
         if([string]::IsNullOrEmpty($refresh_token))
         {
             throw "No refresh token found! Use Get-AADIntAccessTokenForAzureCoreManagement with -SaveToCache switch"
@@ -690,6 +700,7 @@ function Invoke-ReconAsInsider
     Directory access restricted? False
     Directory sync enabled?      true
     Global admins                3
+    CA policies:                 7
 
     PS C:\>$results.roleInformation | Where Members -ne $null | select Name,Members
 
@@ -709,11 +720,11 @@ function Invoke-ReconAsInsider
     Process
     {
         # Get access token from cache
-        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net/" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
         
         # Get the refreshtoken from the cache and create AAD token
         $tenantId = (Read-Accesstoken $AccessToken).tid
-        $refresh_token=$script:refresh_tokens["d3590ed6-52b3-4102-aeff-aad2292ab01c-https://management.core.windows.net"]
+        $refresh_token=$script:refresh_tokens["d3590ed6-52b3-4102-aeff-aad2292ab01c-https://management.core.windows.net/"]
         $AAD_AccessToken = Get-AccessTokenWithRefreshToken -RefreshToken $refresh_token -Resource "https://graph.windows.net" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c" -TenantId $tenantId
 
         # Get the tenant information
@@ -762,7 +773,8 @@ function Invoke-ReconAsInsider
         Write-Host "Users can register apps?     $($tenantInformation.usersCanRegisterApps)"
         Write-Host "Directory access restricted? $($tenantInformation.restrictDirectoryAccess)"
         Write-Host "Directory sync enabled?      $($tenantInformation.companyInformation.DirectorySynchronizationEnabled)"
-        Write-Host "Global admins                $(($tenantInformation.roleInformation | Where-Object ObjectId -eq "62e90394-69f5-4237-9190-012177145e10" | Select-Object -ExpandProperty Members).Count)" 
+        Write-Host "Global admins:               $(($tenantInformation.roleInformation | Where-Object ObjectId -eq "62e90394-69f5-4237-9190-012177145e10" | Select-Object -ExpandProperty Members).Count)" 
+        Write-Host "CA policies:                 $($tenantInformation.conditionalAccessPolicy.Count)" 
 
         # Return
         return $tenantInformation
@@ -826,10 +838,10 @@ function Invoke-UserEnumerationAsInsider
     Process
     {
         # Get access token from cache
-        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net/" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
 
          # Create a new AccessToken for graph.microsoft.com
-        $refresh_token = $script:refresh_tokens["d3590ed6-52b3-4102-aeff-aad2292ab01c-https://management.core.windows.net"]
+        $refresh_token = $script:refresh_tokens["d3590ed6-52b3-4102-aeff-aad2292ab01c-https://management.core.windows.net/"]
         if([string]::IsNullOrEmpty($refresh_token))
         {
             throw "No refresh token found! Use Get-AADIntAccessTokenForAzureCoreManagement with -SaveToCache switch"
@@ -840,7 +852,7 @@ function Invoke-UserEnumerationAsInsider
         # Get the users and some relevant information
         if([String]::IsNullOrEmpty($GroupId))
         {
-            $users = Call-MSGraphAPI -MaxResults $MaxResults -AccessToken $AccessToken -API "users" -ApiVersion "v1.0" -QueryString "`$select=id,displayName,userPrincipalName,onPremisesImmutableId,onPremisesLastSyncDateTime,onPremisesSamAccountName,onPremisesSecurityIdentifier,refreshTokensValidFromDateTime,signInSessionsValidFromDateTime,proxyAddresses,businessPhones,identities"
+            $users = Call-MSGraphAPI -MaxResults $MaxResults -AccessToken $AccessToken -API "users" -ApiVersion "v1.0" -QueryString "`$select=id,displayName,userPrincipalName,userType,onPremisesImmutableId,onPremisesLastSyncDateTime,onPremisesSamAccountName,onPremisesSecurityIdentifier,refreshTokensValidFromDateTime,signInSessionsValidFromDateTime,proxyAddresses,businessPhones,identities"
         }
 
         # Get the groups
@@ -999,7 +1011,7 @@ function Invoke-Phishing
         if($Teams)
         {
             # Get access token from cache
-            $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+            $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net/" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
 
             # Get the list of tenants the user has access to
             $tenants = Get-AzureTenants -AccessToken $AccessToken
@@ -1023,7 +1035,7 @@ function Invoke-Phishing
             $tenant =     $tenantInfo.Id
 
             # Create a new AccessToken for graph.microsoft.com
-            $refresh_token = $script:refresh_tokens["d3590ed6-52b3-4102-aeff-aad2292ab01c-https://management.core.windows.net"]
+            $refresh_token = $script:refresh_tokens["d3590ed6-52b3-4102-aeff-aad2292ab01c-https://management.core.windows.net/"]
             if([string]::IsNullOrEmpty($refresh_token))
             {
                 throw "No refresh token found! Use Get-AADIntAccessTokenForAzureCoreManagement with -SaveToCache switch"
@@ -1140,10 +1152,10 @@ function Invoke-Phishing
         $attributes = @{
             "AADGraph" =         $response.access_token
             "refresh_token" =    $response.refresh_token
-            "EXO" =              Get-AccessTokenWithRefreshToken -Resource "https://outlook.office365.com"       -ClientId $clientId                              -RefreshToken $response.refresh_token -TenantId $Tenant -SaveToCache $SaveToCache
-            "MSGraph" =          Get-AccessTokenWithRefreshToken -Resource "https://graph.microsoft.com"         -ClientId $clientId                              -RefreshToken $response.refresh_token -TenantId $Tenant -SaveToCache $SaveToCache
-            "AZCoreManagement" = Get-AccessTokenWithRefreshToken -Resource "https://management.core.windows.net" -ClientId $clientId                              -RefreshToken $response.refresh_token -TenantId $Tenant -SaveToCache $SaveToCache
-            "Teams" =            Get-AccessTokenWithRefreshToken -Resource "https://api.spaces.skype.com"        -ClientId "1fec8e78-bce4-4aaf-ab1b-5451cc387264" -RefreshToken $response.refresh_token -TenantId $Tenant -SaveToCache $SaveToCache
+            "EXO" =              Get-AccessTokenWithRefreshToken -Resource "https://outlook.office365.com"        -ClientId $clientId                              -RefreshToken $response.refresh_token -TenantId $Tenant -SaveToCache $SaveToCache
+            "MSGraph" =          Get-AccessTokenWithRefreshToken -Resource "https://graph.microsoft.com"          -ClientId $clientId                              -RefreshToken $response.refresh_token -TenantId $Tenant -SaveToCache $SaveToCache
+            "AZCoreManagement" = Get-AccessTokenWithRefreshToken -Resource "https://management.core.windows.net/" -ClientId $clientId                              -RefreshToken $response.refresh_token -TenantId $Tenant -SaveToCache $SaveToCache
+            "Teams" =            Get-AccessTokenWithRefreshToken -Resource "https://api.spaces.skype.com"         -ClientId "1fec8e78-bce4-4aaf-ab1b-5451cc387264" -RefreshToken $response.refresh_token -TenantId $Tenant -SaveToCache $SaveToCache
         }
 
         # Return

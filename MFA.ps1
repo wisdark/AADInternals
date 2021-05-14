@@ -663,6 +663,7 @@ function Get-UserMFAApps
         OathSecretKey      : 
         PhoneAppVersion    : 6.2001.0140
         TimeInterval       : 
+        LastAuthTime       : 16/08/2020 10.12.17
 
         AuthenticationType : OTP
         DeviceName         : NO_DEVICE
@@ -674,6 +675,7 @@ function Get-UserMFAApps
         OathSecretKey      : 
         PhoneAppVersion    : NO_PHONE_APP_VERSION
         TimeInterval       :  
+        LastAuthTime       : 06/08/2019 11.07.05
     #>
 
     [cmdletbinding()]
@@ -870,7 +872,7 @@ function Register-MFAApp
         try
         {
             # Get from cache if not provided
-            $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "0000000c-0000-0000-c000-000000000000" -ClientId "19db86c3-b2b9-44cc-b339-36da233a3be2"
+            $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "0000000c-0000-0000-c000-000000000000" -ClientId "1b730954-1685-4b74-9bfd-dac224a7b894"
         }
         catch
         {
