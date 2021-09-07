@@ -48,7 +48,7 @@ function Get-AzureClassicAdministrators
         }
 
         # Invoke the command
-        $response=Invoke-RestMethod -Method get -Uri "https://management.azure.com/subscriptions/$Subscription/providers/Microsoft.Authorization/classicAdministrators?api-version=2015-06-01" -Headers $headers
+        $response=Invoke-RestMethod -UseBasicParsing -Method get -Uri "https://management.azure.com/subscriptions/$Subscription/providers/Microsoft.Authorization/classicAdministrators?api-version=2015-06-01" -Headers $headers
 
         # Return
         $response.value.properties
@@ -92,7 +92,7 @@ function Grant-AzureUserAccessAdminRole
         }
 
         # Invoke the command. Returns 200 OK if successfull
-        Invoke-RestMethod  -Method Post -Uri "https://management.azure.com/providers/Microsoft.Authorization/elevateAccess?api-version=2015-07-01" -Headers $headers
+        Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://management.azure.com/providers/Microsoft.Authorization/elevateAccess?api-version=2015-07-01" -Headers $headers
     }
 }
 
@@ -133,7 +133,7 @@ function Get-AzureSubscriptions
         }
 
         # Invoke the command. Returns 200 OK if successfull
-        $response = Invoke-RestMethod  -Method Get -Uri "https://management.azure.com/subscriptions?api-version=2016-06-01" -Headers $headers
+        $response = Invoke-RestMethod -UseBasicParsing -Method Get -Uri "https://management.azure.com/subscriptions?api-version=2016-06-01" -Headers $headers
 
         # Return
         foreach($value in $response.value)
@@ -197,7 +197,7 @@ function Get-AzureResourceGroups
         }
 
         # Invoke the command.
-        $response = Invoke-RestMethod  -Method Get -Uri "https://management.azure.com/subscriptions/$SubscriptionId/resourcegroups?api-version=2019-10-01" -Headers $headers
+        $response = Invoke-RestMethod -UseBasicParsing -Method Get -Uri "https://management.azure.com/subscriptions/$SubscriptionId/resourcegroups?api-version=2019-10-01" -Headers $headers
 
         # Return
         foreach($value in $response.value)
@@ -271,7 +271,7 @@ function Get-AzureVMs
         }
         
         # Invoke the command
-        $response = Invoke-RestMethod  -Method Get -Uri "https://management.azure.com/subscriptions/$SubscriptionId/providers/Microsoft.Compute/virtualMachines?api-version=2019-12-01" -Headers $headers
+        $response = Invoke-RestMethod -UseBasicParsing -Method Get -Uri "https://management.azure.com/subscriptions/$SubscriptionId/providers/Microsoft.Compute/virtualMachines?api-version=2019-12-01" -Headers $headers
 
         # Return
         foreach($value in $response.value)
@@ -432,7 +432,7 @@ function Invoke-AzureVMScript
         $async = $response.Headers["Azure-AsyncOperation"]
         Write-Verbose "Azure-AsyncOperation: $async"
 
-        while($status = Invoke-RestMethod -Uri $async -Headers $headers)
+        while($status = Invoke-RestMethod -UseBasicParsing -Uri $async -Headers $headers)
         {
             if($status.status -eq "InProgress")
             {
@@ -545,7 +545,7 @@ function Get-AzureVMRdpSettings
         $async = $response.Headers["Azure-AsyncOperation"]
         Write-Verbose "Azure-AsyncOperation: $async"
 
-        while($status = Invoke-RestMethod -Uri $async -Headers $headers)
+        while($status = Invoke-RestMethod -UseBasicParsing -Uri $async -Headers $headers)
         {
             if($status.status -eq "InProgress")
             {
@@ -621,7 +621,7 @@ function Get-AzureRoleAssignmentId
         }
 
         # Invoke the command
-        $response = Invoke-RestMethod -Method Get -Uri "https://management.azure.com/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions?`$filter=roleName eq '$RoleName'&api-version=2018-01-01-preview" -Headers $headers
+        $response = Invoke-RestMethod -UseBasicParsing -Method Get -Uri "https://management.azure.com/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions?`$filter=roleName eq '$RoleName'&api-version=2018-01-01-preview" -Headers $headers
 
         # Return the ID
         $response.value[0].name
@@ -702,7 +702,7 @@ function Set-AzureRoleAssignment
 "@
 
         # Invoke the command
-        $response = Invoke-RestMethod -Method Put -Uri "https://management.azure.com/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleAssignments/$(New-Guid)?api-version=2018-09-01-preview" -Headers $headers -Body $body
+        $response = Invoke-RestMethod -UseBasicParsing -Method Put -Uri "https://management.azure.com/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleAssignments/$(New-Guid)?api-version=2018-09-01-preview" -Headers $headers -Body $body
 
         # Return the results
         $response.properties
@@ -779,7 +779,7 @@ function Get-AzureTenants
 "@
 
         # Invoke the command.
-        $response = Invoke-RestMethod  -Method Post -Uri "https://management.azure.com/batch?api-version=2015-11-01" -Headers $headers -Body $body
+        $response = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://management.azure.com/batch?api-version=2015-11-01" -Headers $headers -Body $body
 
         # Return
         foreach($value in $response.responses[0].content.value)
@@ -838,7 +838,7 @@ function Invoke-AzureQuery
 "@
 
         # Invoke the command.
-        $response = Invoke-RestMethod  -Method Post -Uri "https://management.azure.com/batch?api-version=2015-11-01" -Headers $headers -Body $body
+        $response = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://management.azure.com/batch?api-version=2015-11-01" -Headers $headers -Body $body
 
         return $response
         
@@ -928,7 +928,7 @@ function Get-AzureDiagnosticSettingsDetails
         }
         
         # Invoke the command.
-        $response = Invoke-RestMethod  -Method Get -Uri "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings/$Name`?api-version=2017-04-01" -Headers $headers
+        $response = Invoke-RestMethod -UseBasicParsing -Method Get -Uri "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings/$Name`?api-version=2017-04-01" -Headers $headers
 
         
         # Return
@@ -964,7 +964,7 @@ function Set-AzureDiagnosticSettingsDetails
     Name of the Sentinel workspace.
 
     .Parameter Logs
-    List of logs to be edited, can be one or more of "SignInLogs","AuditLogs","NonInteractiveUserSignInLogs","ServicePrincipalSignInLogs","ManagedIdentitySignInLogs", or "ProvisioningLogs".
+    List of logs to be edited, can be one or more of "AuditLogs","SignInLogs","NonInteractiveUserSignInLogs","ServicePrincipalSignInLogs","ManagedIdentitySignInLogs","ProvisioningLogs","ADFSSignInLogs","RiskyUsers","UserRiskEvents".
     
     .Parameter Enabled
     Is the log enabled.
@@ -989,6 +989,8 @@ function Set-AzureDiagnosticSettingsDetails
     ServicePrincipalSignInLogs     False             False              0
     ManagedIdentitySignInLogs       True              True            365
     ADFSSignInLogs                 False             False              0
+	RiskyUsers					   False             False              0
+	UserRiskEvents				   False			 False              0
 
     .Example
     $at=Get-AADIntAccessTokenForAzureCoreManagement
@@ -1026,7 +1028,7 @@ function Set-AzureDiagnosticSettingsDetails
         [Parameter(Mandatory=$False)]
         [String]$AccessToken,
         [Parameter(Mandatory=$True)]
-        [ValidateSet("SignInLogs","AuditLogs","NonInteractiveUserSignInLogs","ServicePrincipalSignInLogs","ManagedIdentitySignInLogs","ProvisioningLogs","ADFSSignInLogs")]
+        [ValidateSet("AuditLogs","SignInLogs","NonInteractiveUserSignInLogs","ServicePrincipalSignInLogs","ManagedIdentitySignInLogs","ProvisioningLogs","ADFSSignInLogs","RiskyUsers","UserRiskEvents")]
         [String[]]$Logs,
         [Parameter(Mandatory=$True)]
         [String]$Name,
@@ -1057,7 +1059,7 @@ function Set-AzureDiagnosticSettingsDetails
         }
 
         # Get the current settings and workspaceid
-        $response = Invoke-RestMethod  -Method Get -Uri "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings/$Name`?api-version=2017-04-01" -Headers $headers
+        $response = Invoke-RestMethod -UseBasicParsing -Method Get -Uri "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings/$Name`?api-version=2017-04-01" -Headers $headers
         $workspaceId = $response.properties.workspaceId
 
         # Create the array for log settings objects
@@ -1103,7 +1105,7 @@ function Set-AzureDiagnosticSettingsDetails
         }
         
         # Invoke the command.
-        $response = Invoke-RestMethod  -Method Put -Uri "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings/$Name`?api-version=2017-04-01" -Headers $headers -Body ($body | ConvertTo-Json -Depth 5)
+        $response = Invoke-RestMethod -UseBasicParsing -Method Put -Uri "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings/$Name`?api-version=2017-04-01" -Headers $headers -Body ($body | ConvertTo-Json -Depth 5)
 
         
         # Return
@@ -1177,7 +1179,7 @@ function Get-AzureDiagnosticSettings
         }
 
 
-        $response = Invoke-RestMethod  -Method Get -Uri "https://management.azure.com/api/invoke" -Headers $headers
+        $response = Invoke-RestMethod -UseBasicParsing -Method Get -Uri "https://management.azure.com/api/invoke" -Headers $headers
 
         # Return
         foreach($value in $response.value)
@@ -1197,7 +1199,7 @@ function Get-AzureDiagnosticSettings
 }
 
 # Remove all diagnostic settings
-# Ja 23rd 2021
+# Jan 23rd 2021
 function Remove-AzureDiagnosticSettings
 {
 <#
@@ -1249,8 +1251,82 @@ function Remove-AzureDiagnosticSettings
         foreach($settings in $diagSettings)
         {
             Write-Verbose "Removing diagnostic settings ""$($settings.name)"""
-            Set-AzureDiagnosticSettingsDetails -AccessToken $AccessToken -Name $($settings.name) -Logs AuditLogs,SignInLogs,NonInteractiveUserSignInLogs,ServicePrincipalSignInLogs,ManagedIdentitySignInLogs,ProvisioningLogs,ADFSSignInLogs -Enabled $False -RetentionEnabled $False -RetentionDays 0 | Out-Null
+            Set-AzureDiagnosticSettingsDetails -AccessToken $AccessToken -Name $($settings.name) -Logs "AuditLogs","SignInLogs","NonInteractiveUserSignInLogs","ServicePrincipalSignInLogs","ManagedIdentitySignInLogs","ProvisioningLogs","ADFSSignInLogs","RiskyUsers","UserRiskEvents" -Enabled $False -RetentionEnabled $False -RetentionDays 0 | Out-Null
         }
         
+    }
+}
+
+# Get Azure Directory Activity Log
+# Aug 8th 2021
+function Get-AzureDirectoryActivityLog
+{
+<#
+    .SYNOPSIS
+    Gets Azure Directory Activity log events.
+
+    .DESCRIPTION
+    Gets Azure Directory Activity log events even from tenants without Azure subscription.
+
+    .Parameter AccessToken
+    AccessToken of the user. Should be Global Administrator with access to any Azure subscription of the tenant.
+    If the tenant doesn't have Azure subscription, the user must have "Access management for Azure resources" 
+    switched on at https://portal.azure.com/#blade/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/Properties or use 
+    Grant-AADIntAzureUserAccessAdminRole
+
+    .Parameter Start
+    Start time, must be 90 days of less of the current time. Defaults to one day.
+
+    Get-AADIntAccessTokenForAzureCoreManagement -SaveToCache
+    PS C:\>Grant-AADIntAzureUserAccessAdminRole
+    PS C:\>$events = Get-AADIntAzureDirectoryActivityLog -Start (Get-Date).AddDays(-31)
+    PS C:\>$events | where {$_.authorization.action -like "Microsoft.ADHybrid*"} | %{New-Object psobject -Property ([ordered]@{"Scope"=$_.authorization.scope;"Operation"=$_.operationName.localizedValue;"Caller"=$_.caller;"TimeStamp"=$_.eventTimeStamp})} 
+
+    Scope                                                                                   Operation          Caller          
+    -----                                                                                   ---------          ------          
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Creates a server.  administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Creates a server.  administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Creates a server.  administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Creates a server.  administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Creates a server.  administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Creates a server.  administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Creates a server.  administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Creates a server.  administrator...
+    /providers/Microsoft.ADHybridHealthService                                              Updates a service. administrator...
+    /providers/Microsoft.ADHybridHealthService                                              Updates a service. administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Deletes service.   administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Deletes service.   administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Deletes service.   administrator...
+    /providers/Microsoft.ADHybridHealthService/services/AdFederationService-sts.company.com Deletes service.   administrator...
+    /providers/Microsoft.ADHybridHealthService                                              Updates a service. administrator...
+    /providers/Microsoft.ADHybridHealthService                                              Updates a service. administrator...
+#>
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]$AccessToken,
+        [Parameter(Mandatory=$False)]
+        [DateTime]$Start=(Get-Date).AddDays(-1)
+    )
+    Process
+    {
+        # Get from cache if not provided
+        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net/" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+
+        $headers = @{
+            "Authorization" = "Bearer $AccessToken"
+        }
+
+        $startTime = $Start.ToUniversalTime().ToString("s", [cultureinfo]::InvariantCulture)+"Z"
+
+        $response = Invoke-RestMethod -UseBasicParsing -Uri "https://management.azure.com/providers/microsoft.insights/eventtypes/management/values?api-version=2015-04-01&`$filter=eventTimestamp ge '$startTime'" -Headers $headers
+        while($response.nextLink)
+        {
+            $response.value
+            $response = Invoke-RestMethod -Uri $response.nextLink -Headers $headers
+        }
+        $response.value
+       
+
     }
 }
