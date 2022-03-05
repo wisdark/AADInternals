@@ -4,7 +4,7 @@
 	RootModule = 'AADInternals.psm1'
 
 	# Version number of this module.
-	ModuleVersion = '0.6.4'
+	ModuleVersion = '0.6.6'
 
 	# Supported PSEditions
 	# CompatiblePSEditions = @()
@@ -19,7 +19,7 @@
 	CompanyName = 'Gerenios Ltd'
 
 	# Copyright statement for this module
-	Copyright = '(c) 2018 - 2021 Nestori Syynimaa (@DrAzureAD). Distributed under MIT license.'
+	Copyright = '(c) 2018 - 2022 Nestori Syynimaa (@DrAzureAD). Distributed under MIT license.'
 
 	# Description of the functionality provided by this module
 	Description = 'The AADInternals PowerShell Module utilises several internal features of Azure Active Directory, Office 365, and related admin tools.
@@ -27,6 +27,7 @@
 AADInternals allows you to export ADFS certificates, Azure AD Connect passwords, and modify numerous Azure AD / Office 365 settings not otherwise possible.
 
 DISCLAIMER: Functionality provided through this module are not supported by Microsoft and thus should not be used in a production environment. Use on your own risk! 
+
 '
 
 	# Minimum version of the Windows PowerShell engine required by this module
@@ -72,6 +73,8 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
         ".\ADFS.ps1"
         ".\ADFS_utils.ps1"
         ".\AD_utils.ps1"
+        ".\AdminAPI.ps1"
+        ".\AdminAPI_utils.ps1"
         ".\AMQP.ps1"
         ".\AzureADConnectAPI.ps1"
         ".\AzureADConnectAPI_utils.ps1"
@@ -84,6 +87,8 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
         ".\CommonUtils.ps1"
         ".\ComplianceAPI.ps1"
         ".\ComplianceAPI_utils.ps1"
+        ".\Device.ps1"
+        ".\Device_utils.ps1"
         ".\DRS_Utils.ps1"
         ".\FederatedIdentityTools.ps1"
         ".\GraphAPI.ps1"
@@ -103,6 +108,8 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
         ".\MSAppProxy.ps1"
         ".\MSAppProxy_utils.ps1"
         ".\MSCommerce.ps1"
+        ".\MSPartner.ps1"
+        ".\MSPartner_utils.ps1"
         ".\MSGraphAPI.ps1"
         ".\MSGraphAPI_utils.ps1"
         ".\OfficeApps.ps1"
@@ -113,6 +120,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
         ".\ProcessTools.ps1"
         ".\ProvisioningAPI.ps1"
         ".\ProvisioningAPI_utils.ps1"
+        ".\ProxySettings.ps1"
         ".\PRT.ps1"
         ".\PRT_Utils.ps1"
         ".\PSRP.ps1"
@@ -138,6 +146,8 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Set-ADFSConfiguration"
     "Get-ADFSPolicyStoreRules"
     "Set-ADFSPolicyStoreRules"
+    "Unprotect-ADFSRefreshToken"
+    "New-ADFSRefreshToken"
 
     # ADFS_utils.ps1
     "New-ADFSSelfSignedCertificates"
@@ -161,6 +171,8 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-AccessTokenForCloudShell"
     "Get-AccessTokenForTeams"
     "Get-AccessTokenForMSCommerce"
+    "Get-AccessTokenForMSPartner"
+    "Get-AccessTokenForAdmin"
     
     # AccessToken_utils.ps1
     "Get-LoginInformation"
@@ -196,6 +208,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-GlobalAdmins"
     "New-Domain" # TODO: remove unused parameters
     "Set-ADSyncEnabled"
+    "Get-MSPartnerContracts"
 
     #FederatedIdentityTools.ps1
     "New-SAMLToken"
@@ -221,6 +234,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-WindowsCredentialsSyncConfig"
     "Get-SyncDeviceConfiguration"
     "Join-OnPremDeviceToAzureAD"
+    "Get-PassThroughAuthenticationStatus"
 
     # AzureManagementAPI_utils.ps1
     "Get-AccessTokenForAADIAMAPI"
@@ -384,6 +398,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     # CommonUtils.ps1
     "Get-Error"
     "New-Certificate"
+    "Get-AzureWireServerAddress"
 
     # Teams.ps1
     "Get-SkypeToken"
@@ -422,6 +437,29 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     # ComplianceAPI.ps1
     "Get-ComplianceAPICookies"
     "Search-UnifiedAuditLog"
+
+    # MSPartner.ps1
+    "New-MSPartnerDelegatedAdminRequest"
+    #"New-MSPartnerTrialOffer"
+    #"Get-MSPartnerOffers"
+    #"Get-MSPartnerPublishers"
+    "Get-MSPartnerOrganizations"
+    "Get-MSPartnerRoleMembers"
+    "Find-MSPartners"
+
+    # AdminAPI.ps1
+    "Approve-MSPartnerDelegatedAdminRequest"
+    "Remove-MSPartnerDelegatedAdminRoles"
+    "Get-MSPartners"  
+    
+    # Device.ps1
+    "Export-LocalDeviceCertificate"
+    "Export-LocalDeviceTransportKey" 
+    "Join-LocalDeviceToAzureAD"
+    "Get-LocalDeviceJoinInfo"
+
+    # ProxySettings.ps1
+    "Set-ProxySettings"
 )
 
 	# Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.

@@ -1,7 +1,137 @@
 ﻿# This script contains common utility functions used in different functions
 
+# Constants
+$const_bom = [byte[]]@(0xEF,0xBB,0xBF)
+
+$DPAPI_ENTROPY_CNG_KEY_PROPERTIES = @(0x36,0x6A,0x6E,0x6B,0x64,0x35,0x4A,0x33,0x5A,0x64,0x51,0x44,0x74,0x72,0x73,0x75,0x00) # "6jnkd5J3ZdQDtrsu" + null terminator 
+$DPAPI_ENTROPY_CNG_KEY_BLOB		  = @(0x78,0x54,0x35,0x72,0x5A,0x57,0x35,0x71,0x56,0x56,0x62,0x72,0x76,0x70,0x75,0x41,0x00) # "xT5rZW5qVVbrvpuA" + null terminator
+
 # Unix epoch time (1.1.1970)
 $epoch = Get-Date -Day 1 -Month 1 -Year 1970 -Hour 0 -Minute 0 -Second 0 -Millisecond 0
+
+
+# Gets Azure and Azure Stack WireServer ip address using DHCP
+# Nov 18 2021
+Function Get-AzureWireServerAddress
+{
+<#
+    .SYNOPSIS
+    Gets Azure and Azure Stack WireServer ip address using DHCP
+
+    .DESCRIPTION
+    Gets Azure and Azure Stack WireServer ip address using DHCP. If DHCP query fails, returns the default address (168.63.129.16)
+
+    .Example
+    Get-AADIntAzureWireServerAddress
+
+    168.63.129.16
+
+
+    
+    
+#>
+    [cmdletbinding()]
+
+    param()
+    Begin
+    {
+        Add-Type -path "$PSScriptRoot\Win32Ntv.dll"
+    }
+    Process
+    {
+        # Get adapter that are up
+        $adapters = Get-NetAdapter | Where AdminStatus -eq "Up" 
+
+        # Loop through the adapters
+        foreach($adapter in $adapters)
+        {
+            # Get IPv4 interfaces that have DHCP enabled
+            if((Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4).Dhcp -eq "Enabled")
+            {
+                # Try to query for the address (uses DHCP option 245 and "WindowsAzureGuestAgent" as RequestIdString)
+                $ipAddress = [AADInternals.Native]::getWireServerIpAddress($adapter.InterfaceGuid)
+            }
+
+            # Return if we found the address
+            if($ipAddress)
+            {
+                return $ipAddress.ToString()
+            }
+        }
+        Write-Warning "WireServer address not found with DHCP, returning default address 168.63.129.16"
+        return "168.63.129.16"
+    }
+}
+
+
+
+# Gets property value using reflection
+# Oct 14 2021
+Function Get-ReflectionProperty
+{
+    [cmdletbinding()]
+
+    param(
+        [parameter(Mandatory=$true,ValueFromPipeline)]
+        [psobject]$Object,
+        [parameter(Mandatory=$true)]
+        [String]$PropertyName
+    )
+    Process
+    {
+        $objectType = $Object.GetType()
+        $propertyInfo = $objectType.GetProperty($PropertyName,[System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Public -bor [System.Reflection.BindingFlags]::Static)
+        return $propertyInfo.GetValue($Object, $null)
+    }
+}
+
+# Gets property value using reflection
+# Oct 14 2021
+Function Set-ReflectionProperty
+{
+    [cmdletbinding()]
+
+    param(
+        [parameter(Mandatory=$true,ValueFromPipeline)]
+        [psobject]$Object,
+        [parameter(Mandatory=$true)]
+        [String]$PropertyName,
+        [parameter(Mandatory=$true)]
+        [psobject]$Value
+    )
+    Process
+    {
+        $objectType = $Object.GetType()
+        $propertyInfo = $objectType.GetProperty($PropertyName,[System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Public -bor [System.Reflection.BindingFlags]::Static)
+        return $propertyInfo.SetValue($Object, $Value,$null)
+    }
+}
+
+# Gets object properties using reflection
+# Oct 14 2021
+Function Get-ReflectionProperties
+{
+    [cmdletbinding()]
+
+    param(
+        [parameter(Mandatory=$true,ValueFromPipeline)]
+        [psobject]$Object
+    )
+    Process
+    {
+        $objectType = $Object.GetType()
+        $properties = $objectType.GetProperties([System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Public -bor [System.Reflection.BindingFlags]::Static)
+
+        foreach($property in $properties)
+        {
+            New-Object psobject -Property @{
+                    "Name"  = $property.Name
+                    "Type"  = $property.PropertyType
+                    "Write" = $property.CanWrite
+                }
+        }
+    }
+}
 
 Function Convert-ByteArrayToB64
 {
@@ -22,7 +152,7 @@ Function Convert-ByteArrayToB64
         $b64 = $b64.Replace("/","_").Replace("+","-")
     }
 
-    if($NoPadding)
+    if($NoPadding -or $UrlEncode)
     {
         $b64 = $b64.Replace("=","")
     }
@@ -40,7 +170,7 @@ Function Convert-B64ToByteArray
         [String]
         $B64
     )
-    $B64 = $B64.Replace("_","/").Replace("-","+")
+    $B64 = $B64.Replace("_","/").Replace("-","+").TrimEnd(0x00,"=")
 
     # Fill the header with padding for Base 64 decoding
     while ($B64.Length % 4)
@@ -389,8 +519,7 @@ function Get-CompressedByteArray {
       	$gzipStream.Write( $byteArray, 0, $byteArray.Length )
         $gzipStream.Close()
         $output.Close()
-        $tmp = $output.ToArray()
-        Write-Output $tmp
+        return $output.ToArray()
     }
 }
 
@@ -410,8 +539,44 @@ function Get-DecompressedByteArray {
 	    $gzipStream.CopyTo( $output )
         $gzipStream.Close()
 		$input.Close()
-		[byte[]] $byteOutArray = $output.ToArray()
-        Write-Output $byteOutArray
+		return $output.ToArray()
+    }
+}
+
+function Get-DeflatedByteArray {
+
+	[CmdletBinding()]
+    Param (
+		[Parameter(Mandatory,ValueFromPipeline,ValueFromPipelineByPropertyName)]
+        [byte[]] $byteArray = $(Throw("-byteArray is required"))
+    )
+	Process {
+	    Write-Verbose "Get-DecompressedByteArray"
+	    $output = New-Object System.IO.MemoryStream
+        $defStream = New-Object System.IO.Compression.DeflateStream $output, ([IO.Compression.CompressionMode]::Compress)
+	    $defStream.Write( $byteArray, 0, $byteArray.Length )
+        $defStream.Close()
+		$output.Close()
+		return $output.ToArray()
+    }
+}
+
+function Get-DeDeflatedByteArray {
+
+	[CmdletBinding()]
+    Param (
+		[Parameter(Mandatory,ValueFromPipeline,ValueFromPipelineByPropertyName)]
+        [byte[]] $byteArray = $(Throw("-byteArray is required"))
+    )
+	Process {
+	    Write-Verbose "Get-DecompressedByteArray"
+        $input = New-Object System.IO.MemoryStream( , $byteArray )
+	    $output = New-Object System.IO.MemoryStream
+        $defStream = New-Object System.IO.Compression.DeflateStream $input, ([IO.Compression.CompressionMode]::Decompress)
+	    $defStream.CopyTo( $output )
+        $defStream.Close()
+		$input.Close()
+		return $output.ToArray()
     }
 }
 
@@ -430,114 +595,107 @@ Function Parse-KeyBLOB
         # https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob
         # https://docs.microsoft.com/en-us/windows/win32/seccrypto/base-provider-key-blobs
 
-        # RSAPUBKEY
-        # DWORD magic   ("RSA1" = public, or "RSA2" = private)
-        # DWORD bitlen
-        # ORD pubex
-        $magic  = [text.encoding]::ASCII.GetString($Key[0..3])
-        $bitlen = [bitconverter]::ToUInt16($Key,4)
-        $publen = [bitconverter]::ToUInt16($Key,8)
-        $modlen = [bitconverter]::ToUInt16($Key,12)
-        $pri1len = [bitconverter]::ToUInt16($Key,16)
-        $pri2len = [bitconverter]::ToUInt16($Key,20)
+        # Parse the header
+        $magic   = [text.encoding]::ASCII.GetString($Key[0..3])
+        $bitlen  = [bitconverter]::ToUInt32($Key,4)
+        $publen  = [bitconverter]::ToUInt32($Key,8)
+        $modlen  = [bitconverter]::ToUInt32($Key,12)
+        $pri1len = [bitconverter]::ToUInt32($Key,16)
+        $pri2len = [bitconverter]::ToUInt32($Key,20)
 
-        $pubex  = $Key[24..(24+$publen-1)]
+        $headerLen = 6* [System.Runtime.InteropServices.Marshal]::SizeOf([uint32]::new())
 
-        $p=24+$publen
+        # BYTE pubexp[publen]
+        # BYTE modulus[bitlen/8]
+        # BYTE prime1[bitlen/16]
+        # BYTE prime2[bitlen/16]
+        # BYTE exponent1[bitlen/16]
+        # BYTE exponent2[bitlen/16]
+        # BYTE coefficient[bitlen/16]
+        # BYTE privateExponent[bitlen/8]
 
-        $modulus = $key[($p)..($bitlen/8 + $p)]
-        $p += $modlen
-
-        # Private key
-        if($magic -eq "RSA2") 
+        # Parse RSA1 (RSAPUBLICBLOB)
+        $p = $headerLen
+        $pubexp  = $Key[$headerLen..($headerLen + $publen - 1)]; $p += $publen
+        $modulus = $key[($p)..($p-1 + $modlen)];                 $p += $modlen
+        
+        # Parse RSA2 (RSAPRIVATEBLOB)
+        if($magic -eq "RSA2" -or $magic -eq "RSA3") 
         {
-            # RSAPUBKEY rsapubkey;
+            $prime1 =           $key[($p)..($p-1 + $bitlen/16)] ; $p += $bitlen/16
+            $prime2 =           $key[($p)..($p-1 + $bitlen/16)] ; $p += $bitlen/16
+        }
 
-            # BYTE modulus[rsapubkey.bitlen/8];
-            # BYTE prime1[rsapubkey.bitlen/16];
-            # BYTE prime2[rsapubkey.bitlen/16];
-            # BYTE exponent1[rsapubkey.bitlen/16];
-            # BYTE exponent2[rsapubkey.bitlen/16];
-            # BYTE coefficient[rsapubkey.bitlen/16];
-            # BYTE privateExponent[rsapubkey.bitlen/8];
-
-            $prime1 =           $key[($p)..($p + $bitlen/16)] ; $p += $bitlen/16
-            $prime2 =           $key[($p)..($p + $bitlen/16)] ; $p += $bitlen/16
-            $exponent1 =        $key[($p)..($p + $bitlen/16)] ; $p += $bitlen/16
-            $exponent2 =        $key[($p)..($p + $bitlen/16)] ; $p += $bitlen/16
-            $coefficient =      $key[($p)..($p + $bitlen/16)] ; $p += $bitlen/16
-            $privateExponent =  $key[($p)..($p + $bitlen/8)] 
-            
+        # Parse RSA3 (RSAFULLPRIVATEBLOB)
+        if($magic -eq "RSA3") 
+        {
+            $exponent1 =        $key[($p)..($p-1 + $bitlen/16)] ; $p += $bitlen/16
+            $exponent2 =        $key[($p)..($p-1 + $bitlen/16)] ; $p += $bitlen/16
+            $coefficient =      $key[($p)..($p-1 + $bitlen/16)] ; $p += $bitlen/16
+            $privateExponent =  $key[($p)..($p-1 + $bitlen/8)] 
         }
         
         $attributes=@{
             "D" =        $privateExponent
             "DP" =       $exponent1
             "DQ" =       $exponent2
-            "Exponent" = $pubex
+            "Exponent" = $pubexp
             "InverseQ" = $coefficient
             "Modulus" =  $modulus
             "P" =        $prime1
             "Q"=         $prime2
         }
 
-        [System.Security.Cryptography.RSAParameters]$RSAp = New-Object psobject -Property $attributes
+        [System.Security.Cryptography.RSAParameters]$RSAParameters = New-Object psobject -Property $attributes
 
-        return $RSAp
-
+        return $RSAParameters
     }
 }
 
-# Converts the given RSAParameters to DER
-Function Convert-RSAToDER
+# Converts the given RSAParameters to PEM
+# Feb 6th 2022
+Function Convert-RSAToPEM
 {
 
     [cmdletbinding()]
 
     param(
         [parameter(Mandatory=$true,ValueFromPipeline)]
-        [System.Security.Cryptography.RSAParameters]$RSAParameters,
-        [Switch]$PEM
+        [System.Security.Cryptography.RSAParameters]$RSAParameters
     )
     process
     {
-        # Reverse bytes
+        $pemWriter = [Org.BouncyCastle.OpenSsl.PemWriter]::new([System.IO.StringWriter]::new())
+        $pemWriter.WriteObject([Org.BouncyCastle.Security.DotNetUtilities]::GetRsaKeyPair($RSAParameters).Private)
 
-        $modulus =  $RSAParameters.Modulus[($RSAParameters.Modulus.Length)..0]
-        $exponent = $RSAParameters.Exponent[($RSAParameters.Exponent.Length)..0]
+        $PEM = $pemWriter.Writer.ToString()
 
-        $der = Add-DERSequence -Data @(
-                    Add-DERSequence -Data @(
-                        # OID
-                        Add-DERTag -Tag 0x06 -Data @( 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01 )
-                    
-                        0x05 # Null
-                        0x00
-                    ) # Sequence
-                    Add-DERTag -Tag 0x03 -Data @(
-                        0x00 # Number of unused bits
+        $pemWriter.Writer.Dispose()
 
-                        Add-DERSequence -Data @(
-                            Add-DERInteger -Data $modulus
-                            Add-DERInteger -Data $exponent
-                        
-                        ) # Sequence
-                    ) # Tag 0x03
-                    
-                ) # Sequence
+        return $PEM
 
-        if($PEM)
-        {
-            return @"
------BEGIN PUBLIC KEY-----
-$(Convert-ByteArrayToB64 -Bytes $der)
------END PUBLIC KEY-----
-"@
-        }                
-        else
-        {
-            return $der
-        }
+    }
+}
+
+# Converts the given PEM to RSAParameters
+# Feb 6th 2022
+Function Convert-PEMToRSA
+{
+    [cmdletbinding()]
+    param(
+        [parameter(Mandatory=$true,ValueFromPipeline)]
+        [String]$PEM
+    )
+    process
+    {
+        $pemReader = [Org.BouncyCastle.OpenSsl.PemReader]::new([System.IO.StringReader]::new($PEM))
+        $keys = $pemReader.ReadObject()
+
+        $RSAParameters = [Org.BouncyCastle.Security.DotNetUtilities]::ToRSAParameters($keys.Private)
+
+        $pemReader.Reader.Dispose()
+
+        return $RSAParameters
 
     }
 }
@@ -1251,5 +1409,497 @@ function New-RandomIPv4
     Process
     {
         return "$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255)"
+    }
+}
+
+# Create (or use cached) XML dictionary
+function Get-XmlDictionary
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('WCF','Session')]
+        [String]$Type="WCF"
+    )    
+    Begin
+    {
+        # Create dictionaries array
+        $dictionaries = @{
+                "WCF"     = New-Object System.Xml.XmlDictionary
+                "Session" = New-Object System.Xml.XmlDictionary
+            }
+
+        # Dictionary for WCF binary xml
+        foreach($element in @("mustUnderstand", "Envelope", "http://www.w3.org/2003/05/soap-envelope", "http://www.w3.org/2005/08/addressing", "Header", "Action", "To", "Body", "Algorithm", "RelatesTo", "http://www.w3.org/2005/08/addressing/anonymous", "URI", "Reference", "MessageID", "Id", "Identifier", "http://schemas.xmlsoap.org/ws/2005/02/rm", "Transforms", "Transform", "DigestMethod", "DigestValue", "Address", "ReplyTo", "SequenceAcknowledgement", "AcknowledgementRange", "Upper", "Lower", "BufferRemaining", "http://schemas.microsoft.com/ws/2006/05/rm", "http://schemas.xmlsoap.org/ws/2005/02/rm/SequenceAcknowledgement", "SecurityTokenReference", "Sequence", "MessageNumber", "http://www.w3.org/2000/09/xmldsig#", "http://www.w3.org/2000/09/xmldsig#enveloped-signature", "KeyInfo", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd", "http://www.w3.org/2001/04/xmlenc#", "http://schemas.xmlsoap.org/ws/2005/02/sc", "DerivedKeyToken", "Nonce", "Signature", "SignedInfo", "CanonicalizationMethod", "SignatureMethod", "SignatureValue", "DataReference", "EncryptedData", "EncryptionMethod", "CipherData", "CipherValue", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd", "Security", "Timestamp", "Created", "Expires", "Length", "ReferenceList", "ValueType", "Type", "EncryptedHeader", "http://docs.oasis-open.org/wss/oasis-wss-wssecurity-secext-1.1.xsd", "RequestSecurityTokenResponseCollection", "http://schemas.xmlsoap.org/ws/2005/02/trust", "http://schemas.xmlsoap.org/ws/2005/02/trust#BinarySecret", "http://schemas.microsoft.com/ws/2006/02/transactions", "s", "Fault", "MustUnderstand", "role", "relay", "Code", "Reason", "Text", "Node", "Role", "Detail", "Value", "Subcode", "NotUnderstood", "qname", "", "From", "FaultTo", "EndpointReference", "PortType", "ServiceName", "PortName", "ReferenceProperties", "RelationshipType", "Reply", "a", "http://schemas.xmlsoap.org/ws/2006/02/addressingidentity", "Identity", "Spn", "Upn", "Rsa", "Dns", "X509v3Certificate", "http://www.w3.org/2005/08/addressing/fault", "ReferenceParameters", "IsReferenceParameter", "http://www.w3.org/2005/08/addressing/reply", "http://www.w3.org/2005/08/addressing/none", "Metadata", "http://schemas.xmlsoap.org/ws/2004/08/addressing", "http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous", "http://schemas.xmlsoap.org/ws/2004/08/addressing/fault", "http://schemas.xmlsoap.org/ws/2004/06/addressingex", "RedirectTo", "Via", "http://www.w3.org/2001/10/xml-exc-c14n#", "PrefixList", "InclusiveNamespaces", "ec", "SecurityContextToken", "Generation", "Label", "Offset", "Properties", "Cookie", "wsc", "http://schemas.xmlsoap.org/ws/2004/04/sc", "http://schemas.xmlsoap.org/ws/2004/04/security/sc/dk", "http://schemas.xmlsoap.org/ws/2004/04/security/sc/sct", "http://schemas.xmlsoap.org/ws/2004/04/security/trust/RST/SCT", "http://schemas.xmlsoap.org/ws/2004/04/security/trust/RSTR/SCT", "RenewNeeded", "BadContextToken", "c", "http://schemas.xmlsoap.org/ws/2005/02/sc/dk", "http://schemas.xmlsoap.org/ws/2005/02/sc/sct", "http://schemas.xmlsoap.org/ws/2005/02/trust/RST/SCT", "http://schemas.xmlsoap.org/ws/2005/02/trust/RSTR/SCT", "http://schemas.xmlsoap.org/ws/2005/02/trust/RST/SCT/Renew", "http://schemas.xmlsoap.org/ws/2005/02/trust/RSTR/SCT/Renew", "http://schemas.xmlsoap.org/ws/2005/02/trust/RST/SCT/Cancel", "http://schemas.xmlsoap.org/ws/2005/02/trust/RSTR/SCT/Cancel", "http://www.w3.org/2001/04/xmlenc#aes128-cbc", "http://www.w3.org/2001/04/xmlenc#kw-aes128", "http://www.w3.org/2001/04/xmlenc#aes192-cbc", "http://www.w3.org/2001/04/xmlenc#kw-aes192", "http://www.w3.org/2001/04/xmlenc#aes256-cbc", "http://www.w3.org/2001/04/xmlenc#kw-aes256", "http://www.w3.org/2001/04/xmlenc#des-cbc", "http://www.w3.org/2000/09/xmldsig#dsa-sha1", "http://www.w3.org/2001/10/xml-exc-c14n#WithComments", "http://www.w3.org/2000/09/xmldsig#hmac-sha1", "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256", "http://schemas.xmlsoap.org/ws/2005/02/sc/dk/p_sha1", "http://www.w3.org/2001/04/xmlenc#ripemd160", "http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p", "http://www.w3.org/2000/09/xmldsig#rsa-sha1", "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256", "http://www.w3.org/2001/04/xmlenc#rsa-1_5", "http://www.w3.org/2000/09/xmldsig#sha1", "http://www.w3.org/2001/04/xmlenc#sha256", "http://www.w3.org/2001/04/xmlenc#sha512", "http://www.w3.org/2001/04/xmlenc#tripledes-cbc", "http://www.w3.org/2001/04/xmlenc#kw-tripledes", "http://schemas.xmlsoap.org/2005/02/trust/tlsnego#TLS_Wrap", "http://schemas.xmlsoap.org/2005/02/trust/spnego#GSS_Wrap", "http://schemas.microsoft.com/ws/2006/05/security", "dnse", "o", "Password", "PasswordText", "Username", "UsernameToken", "BinarySecurityToken", "EncodingType", "KeyIdentifier", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#HexBinary", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Text", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-x509-token-profile-1.0#X509SubjectKeyIdentifier", "http://docs.oasis-open.org/wss/oasis-wss-kerberos-token-profile-1.1#GSS_Kerberosv5_AP_REQ", "http://docs.oasis-open.org/wss/oasis-wss-kerberos-token-profile-1.1#GSS_Kerberosv5_AP_REQ1510", "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.0#SAMLAssertionID", "Assertion", "urn:oasis:names:tc:SAML:1.0:assertion", "http://docs.oasis-open.org/wss/oasis-wss-rel-token-profile-1.0.pdf#license", "FailedAuthentication", "InvalidSecurityToken", "InvalidSecurity", "k", "SignatureConfirmation", "TokenType", "http://docs.oasis-open.org/wss/oasis-wss-soap-message-security-1.1#ThumbprintSHA1", "http://docs.oasis-open.org/wss/oasis-wss-soap-message-security-1.1#EncryptedKey", "http://docs.oasis-open.org/wss/oasis-wss-soap-message-security-1.1#EncryptedKeySHA1", "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV1.1", "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV2.0", "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLID", "AUTH-HASH", "RequestSecurityTokenResponse", "KeySize", "RequestedTokenReference", "AppliesTo", "Authenticator", "CombinedHash", "BinaryExchange", "Lifetime", "RequestedSecurityToken", "Entropy", "RequestedProofToken", "ComputedKey", "RequestSecurityToken", "RequestType", "Context", "BinarySecret", "http://schemas.xmlsoap.org/ws/2005/02/trust/spnego", " http://schemas.xmlsoap.org/ws/2005/02/trust/tlsnego", "wst", "http://schemas.xmlsoap.org/ws/2004/04/trust", "http://schemas.xmlsoap.org/ws/2004/04/security/trust/RST/Issue", "http://schemas.xmlsoap.org/ws/2004/04/security/trust/RSTR/Issue", "http://schemas.xmlsoap.org/ws/2004/04/security/trust/Issue", "http://schemas.xmlsoap.org/ws/2004/04/security/trust/CK/PSHA1", "http://schemas.xmlsoap.org/ws/2004/04/security/trust/SymmetricKey", "http://schemas.xmlsoap.org/ws/2004/04/security/trust/Nonce", "KeyType", "http://schemas.xmlsoap.org/ws/2004/04/trust/SymmetricKey", "http://schemas.xmlsoap.org/ws/2004/04/trust/PublicKey", "Claims", "InvalidRequest", "RequestFailed", "SignWith", "EncryptWith", "EncryptionAlgorithm", "CanonicalizationAlgorithm", "ComputedKeyAlgorithm", "UseKey", "http://schemas.microsoft.com/net/2004/07/secext/WS-SPNego", "http://schemas.microsoft.com/net/2004/07/secext/TLSNego", "t", "http://schemas.xmlsoap.org/ws/2005/02/trust/RST/Issue", "http://schemas.xmlsoap.org/ws/2005/02/trust/RSTR/Issue", "http://schemas.xmlsoap.org/ws/2005/02/trust/Issue", "http://schemas.xmlsoap.org/ws/2005/02/trust/SymmetricKey", "http://schemas.xmlsoap.org/ws/2005/02/trust/CK/PSHA1", "http://schemas.xmlsoap.org/ws/2005/02/trust/Nonce", "RenewTarget", "CancelTarget", "RequestedTokenCancelled", "RequestedAttachedReference", "RequestedUnattachedReference", "IssuedTokens", "http://schemas.xmlsoap.org/ws/2005/02/trust/Renew", "http://schemas.xmlsoap.org/ws/2005/02/trust/Cancel", "http://schemas.xmlsoap.org/ws/2005/02/trust/PublicKey", "Access", "AccessDecision", "Advice", "AssertionID", "AssertionIDReference", "Attribute", "AttributeName", "AttributeNamespace", "AttributeStatement", "AttributeValue", "Audience", "AudienceRestrictionCondition", "AuthenticationInstant", "AuthenticationMethod", "AuthenticationStatement", "AuthorityBinding", "AuthorityKind", "AuthorizationDecisionStatement", "Binding", "Condition", "Conditions", "Decision", "DoNotCacheCondition", "Evidence", "IssueInstant", "Issuer", "Location", "MajorVersion", "MinorVersion", "NameIdentifier", "Format", "NameQualifier", "Namespace", "NotBefore", "NotOnOrAfter", "saml", "Statement", "Subject", "SubjectConfirmation", "SubjectConfirmationData", "ConfirmationMethod", "urn:oasis:names:tc:SAML:1.0:cm:holder-of-key", "urn:oasis:names:tc:SAML:1.0:cm:sender-vouches", "SubjectLocality", "DNSAddress", "IPAddress", "SubjectStatement", "urn:oasis:names:tc:SAML:1.0:am:unspecified", "xmlns", "Resource", "UserName", "urn:oasis:names:tc:SAML:1.1:nameid-format:WindowsDomainQualifiedName", "EmailName", "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress", "u", "ChannelInstance", "http://schemas.microsoft.com/ws/2005/02/duplex", "Encoding", "MimeType", "CarriedKeyName", "Recipient", "EncryptedKey", "KeyReference", "e", "http://www.w3.org/2001/04/xmlenc#Element", "http://www.w3.org/2001/04/xmlenc#Content", "KeyName", "MgmtData", "KeyValue", "RSAKeyValue", "Modulus", "Exponent", "X509Data", "X509IssuerSerial", "X509IssuerName", "X509SerialNumber", "X509Certificate", "AckRequested", "http://schemas.xmlsoap.org/ws/2005/02/rm/AckRequested", "AcksTo", "Accept", "CreateSequence", "http://schemas.xmlsoap.org/ws/2005/02/rm/CreateSequence", "CreateSequenceRefused", "CreateSequenceResponse", "http://schemas.xmlsoap.org/ws/2005/02/rm/CreateSequenceResponse", "FaultCode", "InvalidAcknowledgement", "LastMessage", "http://schemas.xmlsoap.org/ws/2005/02/rm/LastMessage", "LastMessageNumberExceeded", "MessageNumberRollover", "Nack", "netrm", "Offer", "r", "SequenceFault", "SequenceTerminated", "TerminateSequence", "http://schemas.xmlsoap.org/ws/2005/02/rm/TerminateSequence", "UnknownSequence", "http://schemas.microsoft.com/ws/2006/02/tx/oletx", "oletx", "OleTxTransaction", "PropagationToken", "http://schemas.xmlsoap.org/ws/2004/10/wscoor", "wscoor", "CreateCoordinationContext", "CreateCoordinationContextResponse", "CoordinationContext", "CurrentContext", "CoordinationType", "RegistrationService", "Register", "RegisterResponse", "ProtocolIdentifier", "CoordinatorProtocolService", "ParticipantProtocolService", "http://schemas.xmlsoap.org/ws/2004/10/wscoor/CreateCoordinationContext", "http://schemas.xmlsoap.org/ws/2004/10/wscoor/CreateCoordinationContextResponse", "http://schemas.xmlsoap.org/ws/2004/10/wscoor/Register", "http://schemas.xmlsoap.org/ws/2004/10/wscoor/RegisterResponse", "http://schemas.xmlsoap.org/ws/2004/10/wscoor/fault", "ActivationCoordinatorPortType", "RegistrationCoordinatorPortType", "InvalidState", "InvalidProtocol", "InvalidParameters", "NoActivity", "ContextRefused", "AlreadyRegistered", "http://schemas.xmlsoap.org/ws/2004/10/wsat", "wsat", "http://schemas.xmlsoap.org/ws/2004/10/wsat/Completion", "http://schemas.xmlsoap.org/ws/2004/10/wsat/Durable2PC", "http://schemas.xmlsoap.org/ws/2004/10/wsat/Volatile2PC", "Prepare", "Prepared", "ReadOnly", "Commit", "Rollback", "Committed", "Aborted", "Replay", "http://schemas.xmlsoap.org/ws/2004/10/wsat/Commit", "http://schemas.xmlsoap.org/ws/2004/10/wsat/Rollback", "http://schemas.xmlsoap.org/ws/2004/10/wsat/Committed", "http://schemas.xmlsoap.org/ws/2004/10/wsat/Aborted", "http://schemas.xmlsoap.org/ws/2004/10/wsat/Prepare", "http://schemas.xmlsoap.org/ws/2004/10/wsat/Prepared", "http://schemas.xmlsoap.org/ws/2004/10/wsat/ReadOnly", "http://schemas.xmlsoap.org/ws/2004/10/wsat/Replay", "http://schemas.xmlsoap.org/ws/2004/10/wsat/fault", "CompletionCoordinatorPortType", "CompletionParticipantPortType", "CoordinatorPortType", "ParticipantPortType", "InconsistentInternalState", "mstx", "Enlistment", "protocol", "LocalTransactionId", "IsolationLevel", "IsolationFlags", "Description", "Loopback", "RegisterInfo", "ContextId", "TokenId", "AccessDenied", "InvalidPolicy", "CoordinatorRegistrationFailed", "TooManyEnlistments", "Disabled", "ActivityId", "http://schemas.microsoft.com/2004/09/ServiceModel/Diagnostics", "http://docs.oasis-open.org/wss/oasis-wss-kerberos-token-profile-1.1#Kerberosv5APREQSHA1", "http://schemas.xmlsoap.org/ws/2002/12/policy", "FloodMessage", "LinkUtility", "Hops", "http://schemas.microsoft.com/net/2006/05/peer/HopCount", "PeerVia", "http://schemas.microsoft.com/net/2006/05/peer", "PeerFlooder", "PeerTo", "http://schemas.microsoft.com/ws/2005/05/routing", "PacketRoutable", "http://schemas.microsoft.com/ws/2005/05/addressing/none", "http://schemas.microsoft.com/ws/2005/05/envelope/none", "http://www.w3.org/2001/XMLSchema-instance", "http://www.w3.org/2001/XMLSchema", "nil", "type", "char", "boolean", "byte", "unsignedByte", "short", "unsignedShort", "int", "unsignedInt", "long", "unsignedLong", "float", "double", "decimal", "dateTime", "string", "base64Binary", "anyType", "duration", "guid", "anyURI", "QName", "time", "date", "hexBinary", "gYearMonth", "gYear", "gMonthDay", "gDay"))
+        {
+            $dictionaries["WCF"].Add($element) | Out-Null
+        }
+
+        # Dictionary for Identity Claims Session binary xml
+        foreach($element in @("Claim","SecurityContextToken","Version","SecureConversationVersion","Issuer","OriginalIssuer","IssuerRef","ClaimCollection","Actor","ClaimProperty","ClaimProperties","Value","ValueType","Label","Type","subjectID","ClaimPropertyName","ClaimPropertyValue","http://www.w3.org/2005/08/addressing/anonymous","http://schemas.xmlsoap.org/ws/2005/05/identity/issuer/self","AuthenticationType","NameClaimType","RoleClaimType","Null", [string]::Empty,"Key","EffectiveTime","ExpiryTime","KeyGeneration","KeyEffectiveTime","KeyExpiryTime","SessionId","Id","ValidFrom","ValidTo","ContextId","SessionToken","SessionTokenCookie","BootStrapToken","Context","ClaimsPrincipal","WindowsPrincipal","WindowIdentity","Identity","Identities","WindowsLogonName","PersistentTrue","SctAuthorizationPolicy","Right","EndpointId","WindowsSidClaim","DenyOnlySidClaim","X500DistinguishedNameClaim","X509ThumbprintClaim","NameClaim","DnsClaim","RsaClaim","MailAddressClaim","SystemClaim","HashClaim","SpnClaim","UpnClaim","UrlClaim","Sid","SessionModeTrue"))
+        {
+            $dictionaries["Session"].Add($element) | Out-Null
+        }
+    }
+    Process
+    {
+        return $dictionaries[$Type]
+    }
+}
+
+# Converts binary xml to XML
+function BinaryToXml
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [byte[]]$xml_bytes,
+        [Parameter(Mandatory=$True)]
+        [System.Xml.XmlDictionary]$Dictionary
+    )
+    Process
+    {
+        $xml_doc = New-Object System.Xml.XmlDocument
+
+        [System.Xml.XmlDictionaryReader]$reader = [System.Xml.XmlDictionaryReader]::CreateBinaryReader($xml_bytes,0,$xml_bytes.Length,$Dictionary,[System.Xml.XmlDictionaryReaderQuotas]::Max)
+
+        $xml_doc.Load($reader)
+
+        return $xml_doc
+    }
+}
+
+# Converts Xml to Binary format
+function XmlToBinary
+{
+[cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [xml]$xml_doc,
+        [Parameter(Mandatory=$True)]
+        [System.Xml.XmlDictionary]$Dictionary
+    )
+    Process
+    {
+        $ms = New-Object System.IO.MemoryStream
+
+        $writer = [System.Xml.XmlDictionaryWriter]::CreateBinaryWriter($ms,$Dictionary)
+        $xml_doc.WriteContentTo($writer);
+        $writer.Flush()
+        $ms.Position = 0;
+        $length=$ms.Length
+
+        [byte[]]$xml_bytes = New-Object Byte[] $length
+        $ms.Flush()
+        $ms.Read($xml_bytes, 0, $length) | Out-Null
+        $ms.Dispose()
+        
+        return $xml_bytes
+    }
+}
+
+function Remove-BOM
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [Byte[]]$ByteArray
+    )
+    Process
+    {
+		if(Compare-Object -ReferenceObject $const_bom -DifferenceObject $ByteArray[0..2] -SyncWindow 0)
+		{
+			return $ByteArray
+		}
+		else
+		{
+			return $ByteArray[3..($ByteArray.length-1)]
+		}
+    }
+}
+
+# removes the given bytes from the given bytearray
+function Remove-Bytes
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [Byte[]]$ByteArray,
+        [Parameter(Mandatory=$True)]
+        [Byte[]]$BytesToRemove
+    )
+    Process
+    {
+        $retVal = @()
+
+        for($i = 0; $i -le $ByteArray.Count; $i++)
+        {
+            $AddByte=$true
+
+            for($b = 0; $b -le $BytesToRemove.Count; $b++)
+            {
+                $ByteToRemove = $BytesToRemove[$b]
+                if($ByteArray[$i] -eq $ByteToRemove)
+                {
+                    $AddByte=$false
+                }
+            }
+            if($AddByte)
+            {
+                $retVal+=$ByteArray[$i]
+            }
+        }
+
+        $retVal
+    }
+}
+
+# Parses the given Cng blob
+# Dec 17th 2021
+function Parse-CngBlob
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [byte[]]$Data,
+        [Parameter(Mandatory=$false)]
+        [switch]$Decrypt,
+        [Parameter(Mandatory=$false)]
+        [switch]$LocalMachine
+    )
+    Begin
+    {
+        Add-Type -AssemblyName System.Security
+    }
+    Process
+    {
+        # Parse the header
+        $version =  [System.BitConverter]::ToInt32($Data,0)
+        $unknown =  [System.BitConverter]::ToInt32($Data,4)
+        $nameLen =  [System.BitConverter]::ToInt32($Data,8)
+        $type    =  [System.BitConverter]::ToInt32($Data,12)
+
+        $publicPropertiesLen  = [System.BitConverter]::ToInt32($Data,16)
+        $privatePropertiesLen = [System.BitConverter]::ToInt32($Data,20)
+        $privateKeyLen        = [System.BitConverter]::ToInt32($Data,24)
+        
+        $unknownArray = $Data[28..43]
+        
+        $name = [text.encoding]::Unicode.GetString($Data, 44, $nameLen)
+
+        Write-Debug "Version:                   $version"
+        Write-Debug "Unknown:                   $unknown"
+        Write-Debug "Name length:               $nameLen"
+        Write-Debug "Type:                      $type"
+        Write-Debug "Public properties length:  $publicPropertiesLen"
+        Write-Debug "Private properties length: $privatePropertiesLen"
+        Write-Debug "Private key length:        $privateKeyLen"
+        Write-Debug "Unknown array:             $(Convert-ByteArrayToHex -Bytes $unknownArray)"
+        Write-Debug "Name:                      $name`n`n"
+
+        Write-Verbose "Parsing Cng key: $name"
+
+        # Set the position
+        $p = 44+$nameLen
+
+        # Parse public properties
+        $publicProperties = @{}
+        $publicPropertiesTotal = 0
+        while($publicPropertiesTotal -lt $publicPropertiesLen)
+        {
+            $pubStructLen         = [System.BitConverter]::ToInt32($Data,$p); $p += 4
+            $pubStructType        = [System.BitConverter]::ToInt32($Data,$p); $p += 4
+            $pubStructUnk         = [System.BitConverter]::ToInt32($Data,$p); $p += 4
+            $pubStructNameLen     = [System.BitConverter]::ToInt32($Data,$p); $p += 4
+            $pubStructPropertyLen = [System.BitConverter]::ToInt32($Data,$p); $p += 4
+
+            $pubStructName        = [text.encoding]::Unicode.GetString($Data, $p, $pubStructNameLen); $p += $pubStructNameLen
+            $pubStructProperty    = $Data[$p..$($p + $pubStructPropertyLen - 1)]; $p += $pubStructPropertyLen
+
+            $publicPropertiesTotal += $pubStructLen
+
+            if([string]::IsNullOrEmpty($pubStructName))
+            {
+                $pubStructName = "Public Key"
+            }
+            elseif($pubStructName -eq "Modified")
+            {
+               $fileTimeUtc =  [System.BitConverter]::ToInt64($pubStructProperty,0)
+               Remove-Variable pubStructProperty
+               $pubStructProperty = [datetime]::FromFileTimeUtc($fileTimeUtc)
+            }
+
+            Write-Debug "Public property struct length: $pubStructLen"
+            Write-Debug "Public property struct type:   $pubStructType"
+            Write-Debug "Public property unknown:       $pubStructUnk"
+            Write-Debug "Public property name length:   $pubStructNameLen"
+            Write-Debug "Public property length:        $pubStructPropertyLen"
+            Write-Debug "Public property name:          $pubStructName"
+
+            if($pubStructName -eq "Modified")
+            {
+                Write-Verbose "Modified:        $($pubStructProperty.ToUniversalTime().ToString("s", [cultureinfo]::InvariantCulture))z`n`n"
+            }
+            else
+            {
+                Write-Debug "Public property:               $(Convert-ByteArrayToHex -Bytes $pubStructProperty)`n`n"
+            }
+
+            $publicProperties[$pubStructName] = $pubStructProperty
+        }
+        
+        # Parse private properties
+        $privateProperties = @{}
+        $privatePropertiesTotal = 0
+
+        $privatePropertiesBlob = $Data[$p..$($p + $privatePropertiesLen -1)]
+        $privateKeyBlob        = $Data[$($p + $privatePropertiesLen)..$($p + $privatePropertiesLen + $privateKeyLen -1)]
+        
+        $attributes = [ordered]@{
+            "Name"          = $name
+            "PublicKeyBlob" = $publicProperties["Public Key"]
+            "PrivateKeyBlob" = @()
+            "RSAParameters" = Parse-KeyBLOB -Key $publicProperties["Public Key"]
+        }
+        if($Decrypt)
+        {
+            $dpapiScope = "CurrentUser"
+            
+            if($LocalMachine)
+            {
+                $CurrentUser = "{0}\{1}" -f $env:USERDOMAIN,$env:USERNAME
+        
+                $dpapiScope = "LocalMachine"
+                # Elevate to get access to the DPAPI keys
+                if([AADInternals.Native]::copyLsassToken())
+                {
+                    Write-Warning "Running as LOCAL SYSTEM. You MUST restart PowerShell to restore $CurrentUser rights."
+                }
+                else
+                {
+                    Write-Error "Could not elevate, unable to decrypt. MUST be run as administrator!"
+                    return
+                }
+            }
+            
+            # Decrypt the private key properties using DPAPI
+            $decPrivateProperties = [Security.Cryptography.ProtectedData]::Unprotect($privatePropertiesBlob, $DPAPI_ENTROPY_CNG_KEY_PROPERTIES, $dpapiScope)
+            $attributes["PrivateKeyProperties"] = $decPrivateProperties
+
+            # Decrypt the private key blob using DPAPI
+            $decPrivateBlob = [Security.Cryptography.ProtectedData]::Unprotect($privateKeyBlob, $DPAPI_ENTROPY_CNG_KEY_BLOB, $dpapiScope)
+            $attributes["PrivateKeyBlob"] = $decPrivateBlob
+
+            # Convert to RSAFULLPRIVATEBLOB to get all parameters
+            $fullPrivateBlob = [AADInternals.Native]::convertKey($decPrivateBlob,"RSAPRIVATEBLOB", "RSAFULLPRIVATEBLOB")
+            $attributes["FullPrivateKeyBlob"] = $fullPrivateBlob
+            $attributes["RSAParameters"] = Parse-KeyBLOB -Key $fullPrivateBlob
+            
+        }
+
+        return New-Object psobject -Property $attributes
+        
+    }
+}
+
+# Splits the given string to the given line lenght using the given separator
+# Dec 17th 2021
+function Split-String
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$String,
+        [Parameter(Mandatory=$false)]
+        [int]$LineLength = 64,
+        [Parameter(Mandatory=$false)]
+        [string]$Separator = "`n"
+    )
+    Process
+    {
+        $retVal = ""
+        $p = 0
+
+        while($p -lt $String.Length)
+        {
+            if($String.Length - $p -lt $LineLength)
+            {
+                $retVal += $String.Substring($p)
+                break
+            }
+            else
+            {
+                $retVal += $String.Substring($p, $LineLength)
+                $retVal += $Separator
+                $p += $LineLength
+            }
+        }
+
+        return $retVal
+    }
+}
+
+# Creates a new RSA keyBLOB from the given RSAParameters
+# Dec 19th 2021
+Function New-KeyBLOB
+{
+
+    [cmdletbinding()]
+
+    param(
+        [parameter(Mandatory=$true,ValueFromPipeline)]
+        [System.Security.Cryptography.RSAParameters]$Parameters,
+        [Parameter(Mandatory=$True)]
+        [ValidateSet('RSA1','RSA2','RSA3')]
+        [String]$Type
+    )
+    process
+    {
+        # Set the size information
+        $bitlen = $Parameters.Modulus.Length * 8
+        $pubLen = $Parameters.Exponent.Length
+        $modlen = $Parameters.Modulus.Length
+        $pri1len = 0
+        $pri2len = 0
+        
+        # Calculate the needed blob size for RSA1 (RSAPUBLICBLOB)
+        $headerLen = 6 * [System.Runtime.InteropServices.Marshal]::SizeOf([uint32]::new())
+        $blobLen =  $headerLen + $pubLen + $modLen
+
+        # Check the parameters and choose the type accordingly
+        if($Type -eq "RSA3" -and (!$Parameters.DP -or !$Parameters.DQ -or !$Parameters.InverseQ -or !$Parameters.D))
+        {
+            Write-Warning "No parameters for RSA3, creating RSA2"
+            $Type = "RSA2"
+        }
+        if($Type -eq "RSA2" -and (!$Parameters.P -or !$Parameters.D))
+        {
+            Write-Warning "No parameters for RSA2, creating RSA1"
+            $Type = "RSA1"
+        }
+
+        # If RSA2 or RSA3, set the P & Q lenghts
+        if($Type -ne "RSA1")
+        {
+            $pri1len = $Parameters.P.Length
+            $pri2len = $Parameters.Q.Length
+        }
+
+        # Adjust the total lenght for RSA2 (RSAPRIVATEBLOB)
+        if($Type -eq "RSA2")
+        {
+            $blobLen += $modLen
+        }
+
+        # Adjust the total lenght for RSA3 (RSAFULLPRIVATEBLOB)
+        if($Type -eq "RSA3")
+        {
+            $blobLen += $modLen + (5 * $modlen/2)
+        }
+        
+        # Create the blob
+        $blob = New-Object byte[] $blobLen
+
+        $magic = [text.encoding]::ASCII.GetBytes($Type)
+
+        $p = 0
+
+        # Set the magic and size information
+        [Array]::Copy($magic, 0, $blob, $p, 4); $p += 4
+        [Array]::Copy([bitconverter]::GetBytes([UInt32]$bitLen) , 0, $blob, $p, 4); $p += 4
+        [Array]::Copy([bitconverter]::GetBytes([UInt32]$pubLen) , 0, $blob, $p, 4); $p += 4
+        [Array]::Copy([bitconverter]::GetBytes([UInt32]$modLen) , 0, $blob, $p, 4); $p += 4
+        [Array]::Copy([bitconverter]::GetBytes([UInt32]$pri1len), 0, $blob, $p, 4); $p += 4
+        [Array]::Copy([bitconverter]::GetBytes([UInt32]$pri2len), 0, $blob, $p, 4); $p += 4
+
+        # Set the public exponent and modulus
+        [Array]::Copy($Parameters.Exponent, 0, $blob, $p, $pubLen) ; $p += $pubLen
+        [Array]::Copy($Parameters.Modulus , 0, $blob, $p, $modLen) ; $p += $modLen
+
+        # Set the private parameters for RSA2 & RSA3
+        if($Type -eq "RSA2" -or $Type -eq "RSA3")
+        {
+            [Array]::Copy($Parameters.P        , 0, $blob, $p, $pri1len) ; $p += $pri1len
+            [Array]::Copy($Parameters.Q        , 0, $blob, $p, $pri2len) ; $p += $pri2len
+        }
+
+        # Set the private parameters for RSA3
+        if($Type -eq "RSA3")
+        {
+            [Array]::Copy($Parameters.DP       , 0, $blob, $p, $pri1len) ; $p += $pri1len
+            [Array]::Copy($Parameters.DQ       , 0, $blob, $p, $pri2len) ; $p += $pri2len
+            [Array]::Copy($Parameters.InverseQ , 0, $blob, $p, $pri2len) ; $p += $pri2len
+            [Array]::Copy($Parameters.D        , 0, $blob, $p, $modLen)
+        }
+        
+        return $blob
+
+    }
+}
+
+# Creates a new pfx file from the given certificate and private key (RSAParameters)
+# Feb 6th 2022
+Function New-PfxFile
+{
+
+    [cmdletbinding()]
+
+    param(
+        [parameter(Mandatory=$true)]
+        [System.Security.Cryptography.RSAParameters]$RSAParameters,
+        [parameter(Mandatory=$true)]
+        [byte[]]$X509Certificate
+    )
+    Begin
+    {
+        Add-Type -path "$PSScriptRoot\BouncyCastle.Crypto.dll"
+    }
+    Process
+    {
+        # Create X509 and private key entries
+        $x509entry       = [Org.BouncyCastle.Pkcs.X509CertificateEntry]::new([Org.BouncyCastle.X509.X509Certificate    ]::new($X509Certificate))
+        $privateKeyEntry = [Org.BouncyCastle.Pkcs.AsymmetricKeyEntry  ]::new([Org.BouncyCastle.Security.DotNetUtilities]::GetRsaKeyPair($RSAParameters).Private)
+
+        # Create a PKCS12 store and add entries
+        $pkcsStore = [Org.BouncyCastle.Pkcs.Pkcs12StoreBuilder]::new().Build()
+        $pkcsStore.SetKeyEntry("AADInternals",$privateKeyEntry,$x509entry)
+
+        # Export as byte array
+        $stream = [System.IO.MemoryStream]::new()
+        $pkcsStore.Save($stream,$null,[Org.BouncyCastle.Security.SecureRandom]::new())
+        $pfxFile = $stream.ToArray() 
+        $stream.Dispose()
+        
+        # Return
+        return $pfxFile
+    }
+}
+
+
+# Checks is the current user running as Administrator
+# Feb 6th 2022
+function Test-LocalAdministrator  
+{
+    [cmdletbinding()]
+
+    param(
+        [parameter(Mandatory=$False)]
+        [switch]$Throw,
+        [parameter(Mandatory=$False)]
+        [switch]$Warn
+    )
+    Process
+    {  
+        $isAdmin = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+
+        if(!$isAdmin -and $Throw)
+        {
+            Write-Warning "The PowerShell session is not elevated, please run as Administrator."
+        }
+        elseif(!$isAdmin -and $Throw)
+        {
+            Throw "The PowerShell session is not elevated, please run as Administrator."
+        }
+        return $isAdmin
     }
 }
