@@ -9,6 +9,8 @@ function Get-BootstrapConfiguration
     Param(
         [Parameter(Mandatory=$True)]
         [String]$MachineName,
+        [Parameter(Mandatory=$False)]
+        [String]$ServiceHost="bootstrap.msappproxy.net",
         [Parameter(Mandatory=$True)]
         [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate
     )
@@ -65,9 +67,17 @@ function Get-BootstrapConfiguration
         </BootstrapRequest>
 "@
 
-        $url="https://$TenantId.bootstrap.msappproxy.net/ConnectorBootstrap"
+        $url="https://$TenantId.$ServiceHost/ConnectorBootstrap"
         
-        $response = Invoke-WebRequest -UseBasicParsing -Uri $url -Method Post -Certificate $Certificate -Body $body -ContentType "application/xml; charset=utf-8"
+        try
+        {
+            $response = Invoke-WebRequest -UseBasicParsing -Uri $url -Method Post -Certificate $Certificate -Body $body -ContentType "application/xml; charset=utf-8"
+        }
+        catch
+        {
+            Write-Error "Could not get bootstrap: $($_.Exception.Message). Probably expired certificate ($($Certificate.Thumbprint)) or invalid agent ($InstanceID)?"
+            return $null
+        }
         
         [xml]$xmlResponse = $response.Content
 

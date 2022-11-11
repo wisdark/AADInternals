@@ -49,15 +49,20 @@ function Export-LocalDeviceCertificate
             $keyPath = "$env:APPDATA"
         }
 
-        # Certificates created with AADInternals are stored in different location
-        if($certificate.PrivateKey.CspKeyContainerInfo.KeyContainerName -eq "AADInternals")
+        # CryptoAPI and CNG stores keys in different directories
+        # https://docs.microsoft.com/en-us/windows/win32/seccng/key-storage-and-retrieval
+        $paths = @(
+            "$keyPath\Microsoft\Crypto\RSA\MachineKeys\$($joinInfo.KeyName)"
+            "$keyPath\Microsoft\Crypto\Keys\$($joinInfo.KeyName)"
+            )
+        foreach($path in $paths)
         {
-            Throw "AADInternals generated Device keys can't be exported"
-            $keyBlob = Get-Content "$keyPath\Microsoft\Crypto\RSA\MachineKeys\$($joinInfo.KeyName)" -Encoding byte -ErrorAction SilentlyContinue
-        }
-        else
-        {
-            $keyBlob = Get-Content "$keyPath\Microsoft\Crypto\Keys\$($joinInfo.KeyName)" -Encoding byte -ErrorAction SilentlyContinue
+            $keyBlob = Get-BinaryContent $path -ErrorAction SilentlyContinue
+            if($keyBlob)
+            {
+                Write-Verbose "Key loaded from $path"
+                break
+            }
         }
 
         if(!$keyBlob)
@@ -73,10 +78,18 @@ function Export-LocalDeviceCertificate
             }
             return
         }
-        $deviceKey = Parse-CngBlob -Data $keyBlob -Decrypt
+        
+        # Parse the key blob
+        $blobType = [System.BitConverter]::ToInt32($keyBlob,0)
+        switch($blobType)
+        {
+            1 { $deviceKey = Parse-CngBlob  -Data $keyBlob -Decrypt }
+            2 { $deviceKey = Parse-CapiBlob -Data $keyBlob -Decrypt }
+            default { throw "Unsupported key blob type" }
+        }
 
         $fileName = "$($joinInfo.deviceId).pfx"
-        Set-Content $fileName -Value (New-PfxFile -RSAParameters (Parse-KeyBLOB -Key $deviceKey.FullPrivateKeyBlob) -X509Certificate $binCert) -Encoding Byte
+        Set-BinaryContent -Path $fileName -Value (New-PfxFile -RSAParameters $deviceKey.RSAParameters -X509Certificate $binCert)
         Write-Host "Device certificate exported to $fileName"
     }
 }
@@ -227,6 +240,15 @@ function Join-LocalDeviceToAzureAD
         Write-Verbose "Device ID:  $deviceId"
         Write-Verbose "Tenant ID:  $tenantId"
         Write-Verbose "Object ID:  $($oids.ObjectId)"
+        Write-Verbose "Region:     $($oids.Region)"
+        Write-Verbose "Join Type:  $($oids.JoinType)"
+
+        if($oids.JoinType -eq 0)
+        {
+            # Certificates for AAD Registered devices won't work :(
+            Remove-Item $certificate -Force
+            Throw "Unable to join: Provided certificate is for AAD Registered device."
+        }
 
         # Generate P2P cert and CA & import to correct stores
         Write-Verbose "Generating P2P certificate & CA"
@@ -234,6 +256,11 @@ function Join-LocalDeviceToAzureAD
 
         $P2P = Import-PfxCertificate -FilePath ".\$($deviceId)-P2P.pfx" -CertStoreLocation "Cert:\LocalMachine\My" -Exportable
         Write-Verbose "Certificate ($($P2P.Subject)) imported to CERT:\LocalMachine\My\$($P2P.Thumbprint)"
+
+        if(-not (Test-Path "Cert:\LocalMachine\AAD Token Issuer"))
+        {
+            New-Item -Path "Cert:\LocalMachine" -Name "AAD Token Issuer" -ItemType "directory" -Force 
+        }
 
         $P2PCA = Import-Certificate -FilePath ".\$($deviceId)-P2P-CA.der" -CertStoreLocation "Cert:\LocalMachine\AAD Token Issuer"
         Write-Verbose "Certificate ($($P2PCA.Subject)) imported to CERT:\LocalMachine\AAD Token Issuer\$($P2PCA.Thumbprint)"

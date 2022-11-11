@@ -3,7 +3,8 @@
 Add-Type -AssemblyName System.Web
 
 # Registers App proxy agent to the Azure AD
-# Apr 2 2020
+# Apr 2nd 2020
+# May 5th 2022: Added UpdateTrust
 function Register-ProxyAgent
 {
     <#
@@ -12,6 +13,27 @@ function Register-ProxyAgent
 
     .DESCRIPTION
     Registers a new MS App Proxy agent to Azure AD. Currently Sync and PTA agents are supported.
+
+    .PARAMETER MachineName
+    Machine name used to register the proxy agent
+
+    .PARAMETER AgentType
+    Type of the proxy agent. One of "PTA","Sync"
+
+    .PARAMETER AgentGroup
+    The Agent group where to add the new agent.
+
+    .PARAMETER UpdateTrust
+    Instead of register a new agent, updates the trust of existing one. As a result, a new proxy certificate is created.
+
+    .PARAMETER Bootstrap
+    Filename of existing bootstrap configuration file.
+
+    .PARAMETER PfxFileName
+    The name of an existing proxy agent certificate used to update trust.
+
+    .PARAMETER PfxPassword
+    Password of the existing proxy agent certificate.
 
     .Example
     $pt=Get-AADIntAccessTokenForPTA
@@ -27,13 +49,22 @@ function Register-ProxyAgent
         [String]$AccessToken,
         [Parameter(Mandatory=$True)]
         [String]$MachineName,
-        [Parameter(Mandatory=$True)]
+        [Parameter(Mandatory=$False)]
         [String]$FileName,
         [Parameter(Mandatory=$True)]
         [Validateset("PTA","Sync")]
         [String]$AgentType,
         [Parameter(Mandatory=$False)]
-        $AgentGroup
+        $AgentGroup,
+        [Parameter(Mandatory=$False)]
+        [bool]$UpdateTrust,
+        [Parameter(Mandatory=$False)]
+        [String]$Bootstrap,
+        [Parameter(Mandatory=$False)]
+        [String]$PfxFileName,
+        [Parameter(Mandatory=$False)]
+        [string]$PfxPassword
+        
     )
     Begin
     {
@@ -52,11 +83,21 @@ function Register-ProxyAgent
     }
     Process
     {
-        # Get from cache if not provided
-        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://proxy.cloudwebappproxy.net/registerapp" -ClientId "cb1056e2-e479-49de-ae31-7812af012ed8"
+        if($UpdateTrust)
+        {
+            # Load the old certificate
+            $cert = Load-Certificate -FileName $PfxFileName -Password $PfxPassword -Exportable
+
+            $tenantId = $cert.Subject.Split("=")[1]
+        }
+        else
+        {
+            # Get from cache if not provided
+            $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://proxy.cloudwebappproxy.net/registerapp" -ClientId "cb1056e2-e479-49de-ae31-7812af012ed8"
+            $tenantId = Get-TenantID -AccessToken $AccessToken
+        }
 
         # Set some variables
-        $tenantId = Get-TenantID -AccessToken $AccessToken
         $OSLanguage="1033"
         $OSLocale="0409"
         $OSSku="8"
@@ -95,46 +136,125 @@ function Register-ProxyAgent
         $b64Csr=[convert]::ToBase64String($csr)
 
         # Create the request body 
-        $body=@"
-        <RegistrationRequest xmlns="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.Registration" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-            <Base64Csr>$b64Csr
-</Base64Csr>
-            <AuthenticationToken>$AccessToken</AuthenticationToken>
-            <Base64Pkcs10Csr i:nil="true"/>
-            <Feature>ApplicationProxy</Feature>
-            <FeatureString>$($AgentInfo[$AgentType]["FeatureString"])</FeatureString>
-            <RegistrationRequestSettings>
-                <SystemSettingsInformation i:type="a:SystemSettings" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.RegistrationCommons" xmlns:a="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.Utilities.SystemSettings">
-                    <a:MachineName>$machineName</a:MachineName>
-                    <a:OsLanguage>$OSLanguage</a:OsLanguage>
-                    <a:OsLocale>$OSLocale</a:OsLocale>
-                    <a:OsSku>$OSSku</a:OsSku>
-                    <a:OsVersion>$OSVersion</a:OsVersion>
-                </SystemSettingsInformation>
-                <PSModuleVersion>1.5.643.0</PSModuleVersion>
-                <SystemSettings i:type="a:SystemSettings" xmlns:a="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.Utilities.SystemSettings">
-                    <a:MachineName>$machineName</a:MachineName>
-                    <a:OsLanguage>$OSLanguage</a:OsLanguage>
-                    <a:OsLocale>$OSLocale</a:OsLocale>
-                    <a:OsSku>$OSSku</a:OsSku>
-                    <a:OsVersion>$OSVersion</a:OsVersion>
-                </SystemSettings>
-            </RegistrationRequestSettings>
-            <TenantId>$tenantId</TenantId>
-            <UserAgent>$($AgentInfo[$AgentType]["UserAgent"])</UserAgent>
-        </RegistrationRequest>
-"@
-        
-        # Register the app and get the certificate
-        $response = Invoke-RestMethod -UseBasicParsing -Uri "https://$tenantId.registration.msappproxy.net/register/RegisterConnector" -Method Post -Body $body -Headers @{"Content-Type"="application/xml; charset=utf-8"}
-        if($response.RegistrationResult.IsSuccessful -eq "true")
+        if($UpdateTrust)
         {
-            # Get the certificate and convert to byte array
-            $b64Cert = $response.RegistrationResult.Certificate
+            if($Bootstrap -and (Test-Path $Bootstrap))
+            {
+                Write-Verbose "Loading bootstrap from $Bootstrap"
+                [xml]$config = Get-Content -Path $Bootstrap -Encoding UTF8
+            }
+            else 
+            {
+                Write-Verbose "Getting bootstrap using $($cert.Thumbprint) as $MachineName"
+                [xml]$config = Get-BootstrapConfiguration -Certificate $cert -MachineName $MachineName
+            }
+
+            if(!$config)
+            {
+                Write-Error "Could not load bootstrap!"
+                return
+            }
+            
+            $trustEndpoint = $config.BootstrapResponse.TrustRenewEndpoint
+            
+            $body=@"
+            <TrustRenewalRequest xmlns="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.Registration.TrustRenewal" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+                <Base64Csr xmlns="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.Registration">$b64Csr
+</Base64Csr>
+                <TrustRenewalRequestSettings>
+                    <SystemSettingsInformation i:type="a:SystemSettings" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.RegistrationCommons" xmlns:a="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.Utilities.SystemSettings">
+                        <a:MachineName>$machineName</a:MachineName>
+                        <a:OsLanguage>$OSLanguage</a:OsLanguage>
+                        <a:OsLocale>$OSLocale</a:OsLocale>
+                        <a:OsSku>$OSSku</a:OsSku>
+                        <a:OsVersion>$OSVersion</a:OsVersion>
+                    </SystemSettingsInformation>
+                    <ConnectorVersion>1.5.2482.0</ConnectorVersion>
+                </TrustRenewalRequestSettings>
+            </TrustRenewalRequest>
+"@
+            # Renew trust and get the certificate
+            $response = Invoke-RestMethod -UseBasicParsing -Uri "$trustEndPoint/RenewTrustCertificate" -Method Post -Body $body -Headers @{"Content-Type"="application/xml; charset=utf-8"} -Certificate $cert
+
+            if($response.TrustRenewalResult.IsSuccessful.'#text' -eq "true")
+            {
+                # Get the certificate
+                $b64Cert = $response.TrustRenewalResult.Certificate.'#text'
+            }
+            else
+            {
+                # Something went wrong
+                Write-Error $response.TrustRenewalResult.ErrorMessage.'#text'
+            }
+        }
+        else
+        {
+            $body=@"
+            <RegistrationRequest xmlns="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.Registration" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+                <Base64Csr>$b64Csr
+</Base64Csr>
+                <AuthenticationToken>$AccessToken</AuthenticationToken>
+                <Base64Pkcs10Csr i:nil="true"/>
+                <Feature>ApplicationProxy</Feature>
+                <FeatureString>$($AgentInfo[$AgentType]["FeatureString"])</FeatureString>
+                <RegistrationRequestSettings>
+                    <SystemSettingsInformation i:type="a:SystemSettings" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.RegistrationCommons" xmlns:a="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.Utilities.SystemSettings">
+                        <a:MachineName>$machineName</a:MachineName>
+                        <a:OsLanguage>$OSLanguage</a:OsLanguage>
+                        <a:OsLocale>$OSLocale</a:OsLocale>
+                        <a:OsSku>$OSSku</a:OsSku>
+                        <a:OsVersion>$OSVersion</a:OsVersion>
+                    </SystemSettingsInformation>
+                    <PSModuleVersion>1.5.643.0</PSModuleVersion>
+                    <SystemSettings i:type="a:SystemSettings" xmlns:a="http://schemas.datacontract.org/2004/07/Microsoft.ApplicationProxy.Common.Utilities.SystemSettings">
+                        <a:MachineName>$machineName</a:MachineName>
+                        <a:OsLanguage>$OSLanguage</a:OsLanguage>
+                        <a:OsLocale>$OSLocale</a:OsLocale>
+                        <a:OsSku>$OSSku</a:OsSku>
+                        <a:OsVersion>$OSVersion</a:OsVersion>
+                    </SystemSettings>
+                </RegistrationRequestSettings>
+                <TenantId>$tenantId</TenantId>
+                <UserAgent>$($AgentInfo[$AgentType]["UserAgent"])</UserAgent>
+            </RegistrationRequest>
+"@
+            # Register the app and get the certificate
+            $response = Invoke-RestMethod -UseBasicParsing -Uri "https://$tenantId.registration.msappproxy.net/register/RegisterConnector" -Method Post -Body $body -Headers @{"Content-Type"="application/xml; charset=utf-8"}
+
+            if($response.RegistrationResult.IsSuccessful -eq "true")
+            {
+                # Get the certificate
+                $b64Cert = $response.RegistrationResult.Certificate
+            }
+            else
+            {
+                # Something went wrong
+                Write-Error $response.RegistrationResult.ErrorMessage
+            }
+        }
+        
+        if(![string]::IsNullOrEmpty($b64Cert))
+        {
+        
+            # Convert certificate to byte array
             $binCert = [convert]::FromBase64String($b64Cert)
             
             # Create a new x509certificate 
             $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($binCert,"",[System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet -band [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+
+            # Get the instance Id (=Agent Id)
+            foreach($extension in $cert.Extensions)
+            {
+                if($extension.Oid.Value -eq "1.3.6.1.4.1.311.82.1")
+                {
+                    $InstanceID = [guid]$extension.RawData
+                }
+            }
+
+            if([string]::IsNullOrEmpty($FileName))
+            {
+                $FileName = "$($MachineName)_$($tenantId)_$($InstanceID)_$($cert.Thumbprint).pfx"
+            }
 
             # Store the private key so that it can be exported
             $cspParameters = [System.Security.Cryptography.CspParameters]::new()
@@ -149,35 +269,33 @@ function Register-ProxyAgent
 
             # Export the certificate to pfx
             $binCert = $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx)
-            $binCert | Set-Content $fileName -Encoding Byte
+            Set-BinaryContent -Path $fileName -Value $binCert
 
             # Remove the private key from the store
             $privateKey.PersistKeyInCsp=$false
             $privateKey.Clear()
 
-            # Get the instance Id (=Agent Id)
-            foreach($extension in $cert.Extensions)
+            
+
+            if($UpdateTrust)
             {
-                if($extension.Oid.Value -eq "1.3.6.1.4.1.311.82.1")
-                {
-                    $InstanceID = [guid]$extension.RawData
-                }
+                Write-Host "$AgentType Agent ($InstanceID) certificate renewed for $MachineName"
             }
-
-            Write-Host "$AgentType Agent ($InstanceID) registered as $MachineName"
+            else
+            {
+                Write-Host "$AgentType Agent ($InstanceID) registered as $MachineName"
+            }
             Write-Host "Certificate saved to $FileName"
-        }
-        else
-        {
-            # Something went wrong
-            Write-Error $response.RegistrationResult.ErrorMessage
-        }
 
-        # We need to register the agent to a group 
-        if($AgentType -eq "Sync" -and [string]::IsNullOrEmpty($AgentGroup) -ne $true)
-        {
-            Add-ProxyAgentToGroup -AccessToken $AccessToken -Agent $InstanceID -Group $AgentGroup
+            # We need to register the agent to a group 
+            if($AgentType -eq "Sync" -and [string]::IsNullOrEmpty($AgentGroup) -ne $true)
+            {
+                Add-ProxyAgentToGroup -AccessToken $AccessToken -Agent $InstanceID -Group $AgentGroup
+            }
         }
+        
+
+        
     }
 }
 
@@ -447,5 +565,226 @@ function Add-ProxyAgentToGroup
         Invoke-RestMethod -UseBasicParsing -Uri "https://$TenantId.admin.msappproxy.net/onPremisesPublishingProfiles('provisioning')/agents('$($Agent.toString())')/agentGroups/`$ref" -Method Post -Headers $headers -Body $body
 
         Write-Host "Agent ($($Agent.toString())) added to group ($($Group.toString()))"
+    }
+}
+
+# Export proxy agent certificates from the local computer
+# Mar 8th 2022
+# Aug 17th 2022: Added support for exporting from NETWORK SERVICE personal store
+function Export-ProxyAgentCertificates
+{
+    <#
+    .SYNOPSIS
+    Export certificates of all MS App Proxy agents from the local computer.
+
+    .DESCRIPTION
+    Export certificates of all MS App Proxy agents from the local computer.
+    The filename of the certificate is <server FQDN>_<tenant id>_<agent id>_<cert thumbprint>.pfx
+
+    .Example
+    Export-AADIntProxyAgentCertificates
+
+    WARNING: Elevating to LOCAL SYSTEM. You MUST restart PowerShell to restore PTA01\Administrator rights.
+
+    Certificate saved to: PTA01.company.com_ea664074-37dd-4797-a676-b0cf6fdafcd4_4b6ffe82-bfe2-4357-814c-09da95399da7_A3457AEAE25D4C513BCF37CB138628772BE1B52.pfx
+    
+    #>
+    [cmdletbinding()]
+    Param()
+
+    Process
+    {
+        # Get all certificates from LocalMachine Personal store
+        $certificates = @(Get-Item Cert:\LocalMachine\My\*)
+
+        # Internal function to parse PTA & Provisioning agent configs
+        function Parse-ConfigCert
+        {
+            [cmdletbinding()]
+            Param(
+                [String]$ConfigPath
+            )
+            Process
+            {
+                # Check if we have a PTA or provisioning agent configuration and get the certificate if stored in NETWORK SERVICE personal store
+                [xml]$trustConfig = Get-Content "$env:ProgramData\Microsoft\$ConfigPath\Config\TrustSettings.xml" -ErrorAction SilentlyContinue
+        
+                if($trustConfig)
+                {
+                    $thumbPrint = $trustConfig.ConnectorTrustSettingsFile.CloudProxyTrust.Thumbprint
+
+                    # Check where the certificate is stored
+                    if($trustConfig.ConnectorTrustSettingsFile.CloudProxyTrust.IsInUserStore.ToLower().equals("true"))
+                    {
+                        # Certificate is stored in NETWORK SERVICE personal store so we need to parse it from there
+                        Write-Verbose "Parsing certificate: $($thumbPrint)"
+
+                        Parse-CertBlob -Data (Get-BinaryContent "$env:windir\ServiceProfiles\NetworkService\AppData\Roaming\Microsoft\SystemCertificates\My\Certificates\$thumbPrint")
+                    }
+
+                } 
+            }
+        }
+        
+        if($PTACert = Parse-ConfigCert -ConfigPath "Azure AD Connect Authentication Agent")
+        {
+            $binCert = $PTACert.DER
+            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new([byte[]]$binCert)
+            $PTAKeyName = $PTACert.KeyName
+            $certificates += $certificate
+        }
+
+        if($ProvCert = Parse-ConfigCert -ConfigPath "Azure AD Connect Provisioning Agent")
+        {
+            $binCert = $ProvCert.DER
+            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new([byte[]]$binCert)
+            $ProvKeyName = $ProvCert.KeyName
+            $certificates += $certificate
+        }
+        
+
+        $CurrentUser = "{0}\{1}" -f $env:USERDOMAIN,$env:USERNAME
+        Write-Warning "Elevating to LOCAL SYSTEM. You MUST restart PowerShell to restore $CurrentUser rights."
+
+        foreach($certificate in $certificates)
+        {
+            Write-Verbose "Reading certificate: $($certificate.Thumbprint)"
+
+            foreach($ext in $Certificate.Extensions)
+            {
+                # Check the agent Id OID exist
+                if($ext.Oid.Value -eq "1.3.6.1.4.1.311.82.1")
+                {
+                    # Extract agent and tenant IDs
+                    $agentId  = [guid] $ext.RawData
+                    $tenantId = [guid] $certificate.Subject.Split("=")[1]
+
+                    Write-Verbose " Tenant Id: $tenantId, Agent Id: $agentId"
+
+                    # Get the certificate
+                    $binCert = $certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+
+                    # Get the key blob and decrypt the keys
+                    if($PTACert)
+                    {
+                        # If stored in NETWORK SERVICE store, PTA Agent's key name can't be readed from the certificate
+                        $keyName = $PTAKeyName
+                    }
+                    elseif($ProvCert)
+                    {
+                        # If stored in NETWORK SERVICE store, Provisioning Agent's key name can't be readed from the certificate
+                        $keyName = $ProvKeyName
+                    }
+                    else
+                    {
+                        # Read the key name from the certificate
+                        $keyName = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($certificate).key.uniquename
+                    }
+
+                    # Discard trailing null, cr, lf
+                    $keyName = $keyName.trimEnd(@(0x00,0x0a,0x0d))
+
+                    $paths = @(
+                        "$env:ALLUSERSPROFILE\Microsoft\Crypto\RSA\MachineKeys\$keyName"
+                        "$env:ALLUSERSPROFILE\Microsoft\Crypto\Keys\$keyName"
+                        "$env:windir\ServiceProfiles\NetworkService\AppData\Roaming\Microsoft\Crypto\RSA\S-1-5-20\$keyName"
+                        )
+                    foreach($path in $paths)
+                    {
+                        $keyBlob = Get-BinaryContent $path -ErrorAction SilentlyContinue
+                        if($keyBlob)
+                        {
+                            Write-Verbose "Key loaded from $path"
+                            break
+                        }
+                    }
+                    if(!$keyBlob)
+                    {
+                        if($keyName.EndsWith(".PCPKEY"))
+                        {
+                            # This machine has a TPM
+                            Throw "PCP keys are not supported, unable to export private key!"
+                        }
+                        else
+                        {
+                            Throw "Error accessing key. If you are already elevated to LOCAL SYSTEM, restart PowerShell and try again."
+                        }
+                        return
+                    }
+                    $blobType = [System.BitConverter]::ToInt32($keyBlob,0)
+                    switch($blobType)
+                    {
+                        1 { $privateKey = Parse-CngBlob  -Data $keyBlob -Decrypt -LocalMachine}
+                        2 { $privateKey = Parse-CapiBlob -Data $keyBlob -Decrypt -LocalMachine}
+                        default { throw "Unsupported key blob type" }
+                    } 
+
+                    # Save to pfx file
+                    $machineName = Get-ComputerName -FQDN
+                    $fileName = "$($machineName)_$($tenantId)_$($agentId)_$($certificate.Thumbprint).pfx"
+                    Set-BinaryContent -Path $fileName -Value (New-PfxFile -RSAParameters ($privateKey.RSAParameters) -X509Certificate $binCert)
+
+                    Write-Host "Certificate saved to: $fileName"
+
+                    break
+                }
+            }
+        }
+
+    }
+}
+
+# Export proxy agent bootstraps using the given certificates
+# Nov 1st 2022
+function Export-ProxyAgentBootstraps
+{
+    <#
+    .SYNOPSIS
+    Export bootstraps of the given certificates.
+
+    .DESCRIPTION
+    Export boostraps of the given certificates. Uses the FQDN of the current computer as MachineName.
+    The filename of the bootstrap is same than the certificate with .xml extension
+
+    .Example
+    Export-AADIntProxyAgentBootstraps -Certificates PTA01.company.com_ea664074-37dd-4797-a676-b0cf6fdafcd4_4b6ffe82-bfe2-4357-814c-09da95399da7_A3457AEAE25D4C513BCF37CB138628772BE1B52.pfx
+
+    Bootstrap saved to: PTA01.company.com_ea664074-37dd-4797-a676-b0cf6fdafcd4_4b6ffe82-bfe2-4357-814c-09da95399da7_A3457AEAE25D4C513BCF37CB138628772BE1B52.xml
+    #>
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String[]]$Certificates
+    )
+
+    Process
+    {
+        foreach($fileName in $Certificates)
+        {
+            if(Test-Path $fileName)
+            {
+                try
+                {
+                    $certificate = Load-Certificate -FileName $fileName -Exportable    
+
+                    # Sleep a sec to get the cert properly loaded
+                    Start-Sleep -Seconds 1 
+
+                    $bootStrap = Get-BootstrapConfiguration -MachineName (Get-ComputerName -FQDN) -Certificate $certificate
+                            
+                    if($bootstrap -eq $null)
+                    {
+                        Throw "Could not get bootstrap"
+                    }
+                    $bootStrapFileName = "$($fileName.Substring(0,$fileName.LastIndexOf(".")-1)).xml"
+                    Set-Content $bootStrapFileName -Value $bootStrap
+                    Write-Host "Bootstrap saved to: $bootStrapFileName"
+                }
+                catch
+                {
+                    Write-Warning "Could not get bootstrap for $fileName"
+                }
+            }
+        }
     }
 }

@@ -4,7 +4,7 @@
 	RootModule = 'AADInternals.psm1'
 
 	# Version number of this module.
-	ModuleVersion = '0.6.6'
+	ModuleVersion = '0.7.8'
 
 	# Supported PSEditions
 	# CompatiblePSEditions = @()
@@ -81,6 +81,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
         ".\AzureCoreManagement.ps1"
         ".\AzureManagementAPI.ps1"
         ".\AzureManagementAPI_utils.ps1"
+        ".\CBA.ps1"
         ".\ClientTools.ps1"
         ".\CloudShell.ps1"
         ".\CloudShell_utils.ps1"
@@ -115,6 +116,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
         ".\OfficeApps.ps1"
         ".\OneDrive.ps1"
         ".\OneDrive_utils.ps1"
+        ".\OneNote.ps1"
         ".\OutlookAPI.ps1"
         ".\OutlookAPI_utils.ps1"
         ".\ProcessTools.ps1"
@@ -126,12 +128,14 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
         ".\PSRP.ps1"
         ".\PSRP_utils.ps1"
         ".\PTA.ps1"
-        ".\PTAAgent.ps1"
         ".\PTASpy.ps1"
         ".\SARA.ps1"
+        ".\SARA_utils.ps1"
         ".\SPO.ps1"
         ".\SPO_utils.ps1"
+        ".\SQLite.ps1"
         ".\SyncAgent.ps1"
+        ".\TBRES.ps1"
         ".\Teams.ps1"
         ".\Teams_utils.ps1"
         ".\WBAWeaponiser.ps1"
@@ -156,6 +160,8 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-ADFSConfiguration"
     
     # AccessToken.ps1
+    "Get-AccessToken"
+    "Get-AccessTokenWithRefreshToken"
     "Get-AccessTokenForAADGraph"
     "Get-AccessTokenForMSGraph"
     "Get-AccessTokenForPTA"
@@ -173,6 +179,8 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-AccessTokenForMSCommerce"
     "Get-AccessTokenForMSPartner"
     "Get-AccessTokenForAdmin"
+    "Get-AccessTokenForOneNote"
+    "Unprotect-EstsAuthPersistentCookie"
     
     # AccessToken_utils.ps1
     "Get-LoginInformation"
@@ -184,6 +192,10 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-TenantDomains"
     "Get-Cache"
     "Clear-Cache"
+    "Add-AccessTokenToCache"
+    "Export-TeamsTokens"
+    "Export-AzureCliTokens"
+    "Export-TokenBrokerTokens"
 
     # GraphAPI.ps1
     "Get-TenantDetails"
@@ -226,7 +238,9 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Set-UserPassword"
     "Reset-ServiceAccount"
     "Set-PassThroughAuthenticationEnabled"
-    "Set-PasswordHashSyncEnabled"
+    #"Set-PasswordHashSyncEnabled"
+    "Set-SyncFeatures"
+    "Get-SyncFeatures"
     "Set-DesktopSSOEnabled"
     "Get-DesktopSSO"
     "Set-DesktopSSO"
@@ -234,7 +248,6 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-WindowsCredentialsSyncConfig"
     "Get-SyncDeviceConfiguration"
     "Join-OnPremDeviceToAzureAD"
-    "Get-PassThroughAuthenticationStatus"
 
     # AzureManagementAPI_utils.ps1
     "Get-AccessTokenForAADIAMAPI"
@@ -288,6 +301,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-SPOSiteUsers"
     "Get-SPOSiteGroups"
     "Get-SPOUserProperties"
+    "Set-SPOSiteMembers"
 
     # Kerberos.ps1
     "New-KerberosTicket"
@@ -295,9 +309,6 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     # PTA.ps1
     "Register-PTAAgent"
     "Set-PTACertificate"
-
-    # PTAAgent.ps1
-    "Invoke-PTAAgent"
 
     # OneDrive_utils.ps1
     "New-OneDriveSettings"
@@ -318,9 +329,11 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     # SyncAgent.ps1
     "Register-SyncAgent"
 
-    # MSAppProxy_utils.ps1
+    # MSAppProxy.ps1
     "Get-ProxyAgents"
     "Get-ProxyAgentGroups"
+    "Export-ProxyAgentCertificates"
+    "Export-ProxyAgentBootstraps"
 
     # AD_Utils.ps1
     "Get-DPAPIKeys"
@@ -360,6 +373,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Remove-RolloutPolicyGroups"
     "Remove-RolloutPolicy"
     "Set-RolloutPolicy"
+    "Get-TenantDomain"
 
     # KillChain.ps1
     "Invoke-UserEnumerationAsOutsider"
@@ -409,6 +423,12 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-TeamsMessages"
     "Remove-TeamsMessages"
     "Set-TeamsMessageEmotion"
+    "Find-TeamsExternalUser"
+    "Get-TeamsAvailability"
+    "Get-Translation"
+
+    # Teams_utils.ps1
+    "Get-TeamsUserSettings"
 
     # DRS_Utils.ps1
     "Get-ADUserNTHash"
@@ -451,6 +471,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Approve-MSPartnerDelegatedAdminRequest"
     "Remove-MSPartnerDelegatedAdminRoles"
     "Get-MSPartners"  
+    "Get-TenantOrganisationInformation"
     
     # Device.ps1
     "Export-LocalDeviceCertificate"
@@ -460,6 +481,13 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
 
     # ProxySettings.ps1
     "Set-ProxySettings"
+
+    # OneNote.ps1
+    "Start-Speech"
+
+    # CBA.ps1
+    "Get-AdminPortalAccessTokenUsingCBA"
+    "Get-PortalAccessTokenUsingCBA"
 )
 
 	# Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.

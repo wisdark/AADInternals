@@ -12,7 +12,7 @@ function Get-AzureClassicAdministrators
     Returns classic administrators of the given Azure subscription
 
     .Example
-    Get-AADIntAzureClassicAdministrators
+    Get-AADIntAzureClassicAdministrators -Subscription "4f9fe2bc-71b3-429f-8a63-5957f1582144"
 
     emailAddress                  role                                     
     ------------                  ----                                     
@@ -21,7 +21,7 @@ function Get-AzureClassicAdministrators
 
     .Example
     C:\PS>Get-AADIntAccessTokenForAzureCoreManagement -SaveToCache
-    C:\PS>Get-AADIntAzureClassicAdministrators
+    C:\PS>Get-AADIntAzureClassicAdministrators -Subscription "4f9fe2bc-71b3-429f-8a63-5957f1582144"
 
     emailAddress                  role                                     
     ------------                  ----                                     
@@ -758,31 +758,12 @@ function Get-AzureTenants
         # Set the headers
         $headers=@{
             "Authorization" = "Bearer $AccessToken"
-            "Content-type" = "application/json"
         }
-
-        $body=@"
-        {
-            "requests":
-            [
-                {
-                    "httpMethod":"GET",
-                    "name":"$((New-Guid).ToString())",
-                    "requestHeaderDetails":
-                    {
-                        "commandName":"fx.Services.Tenants.getTenants"
-                    },
-                    "url":"/tenants?api-version=2019-03-01&`$includeAllTenantCategories=true"
-                }
-            ]
-        }'
-"@
-
-        # Invoke the command.
-        $response = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://management.azure.com/batch?api-version=2015-11-01" -Headers $headers -Body $body
+        # Invoke the command. 
+        $response = Invoke-RestMethod -UseBasicParsing -Method Get -Uri "https://management.azure.com/tenants?api-version=2020-01-01&`$includeAllTenantCategories=true" -Headers $headers
 
         # Return
-        foreach($value in $response.responses[0].content.value)
+        foreach($value in $response.value)
         {
             $attributes=[ordered]@{
                 "Id" =      $value.tenantId

@@ -23,8 +23,19 @@ function Get-AccessTokenFromCache
             # Check if cache entry is empty
             if([string]::IsNullOrEmpty($Script:tokens["$ClientId-$Resource"]))
             {
-                # Empty, so throw the exception
-                Throw "No saved tokens found. Please call Get-AADIntAccessTokenFor<service> -SaveToCache"
+                Write-Verbose "Access token for $ClientId-$Resource not found. Trying to find other clients for the resource"
+                foreach($key in $Script:tokens.Keys)
+                {
+                    if($key.TrimEnd("/").EndsWith($Resource.TrimEnd("/")))
+                    {
+                        $retVal=$Script:tokens[$key]
+                    }
+                }
+                if([string]::IsNullOrEmpty($retVal))
+                {
+                    # Empty, so throw the exception
+                    Throw "No saved tokens found. Please call Get-AADIntAccessTokenFor<service> -SaveToCache"
+                }
             }
             else
             {
@@ -183,11 +194,13 @@ function Get-AccessTokenForMSGraph
         [String]$Domain,
         [Parameter(ParameterSetName='DeviceCode',Mandatory=$True)]
         [switch]$UseDeviceCode,
+        [Parameter(Mandatory=$False)]
+        [String]$Tenant,
         [switch]$SaveToCache
     )
     Process
     {
-        Get-AccessToken -Credentials $Credentials -Resource "https://graph.microsoft.com" -ClientId "1b730954-1685-4b74-9bfd-dac224a7b894" -SAMLToken $SAMLToken -KerberosTicket $KerberosTicket -Domain $Domain -SaveToCache $SaveToCache -PRTToken $PRTToken -UseDeviceCode $UseDeviceCode 
+        Get-AccessToken -Credentials $Credentials -Resource "https://graph.microsoft.com" -ClientId "1b730954-1685-4b74-9bfd-dac224a7b894" -SAMLToken $SAMLToken -KerberosTicket $KerberosTicket -Domain $Domain -SaveToCache $SaveToCache -PRTToken $PRTToken -UseDeviceCode $UseDeviceCode -Tenant $Tenant
     }
 }
 
@@ -430,7 +443,7 @@ function Get-AccessTokenForEXOPS
     Process
     {
         # Office app has the required rights to Exchange Online
-        Get-AccessToken -Credentials $Credentials -Resource "https://outlook.office365.com" -ClientId "a0c73c16-a7e3-4564-9a95-2bdf47383716" -SAMLToken $SAMLToken -KerberosTicket $KerberosTicket -UserPrincipalName $UserPrincipalName -SaveToCache $SaveToCache -PRTToken $PRTToken -UseDeviceCode $UseDeviceCode 
+        Get-AccessToken -Credentials $Credentials -Resource "https://outlook.office365.com" -ClientId "a0c73c16-a7e3-4564-9a95-2bdf47383716" -SAMLToken $SAMLToken -KerberosTicket $KerberosTicket -SaveToCache $SaveToCache -PRTToken $PRTToken -UseDeviceCode $UseDeviceCode -Domain $Domain
     }
 }
 
@@ -749,17 +762,22 @@ function Get-AccessTokenForMySignins
 
     .DESCRIPTION
     Gets OAuth Access Token for My Signins, which is used for example when registering MFA.
+    
+    .Parameter Credentials
+    Credentials of the user.
    
     .Example
     PS C:\>Get-AADIntAccessTokenForMySignins
 #>
     [cmdletbinding()]
     Param(
+        [Parameter(ParameterSetName='Credentials',Mandatory=$False)]
+        [System.Management.Automation.PSCredential]$Credentials,
         [switch]$SaveToCache
     )
     Process
     {
-        return Get-AccessToken -ClientId 1b730954-1685-4b74-9bfd-dac224a7b894 -Resource "0000000c-0000-0000-c000-000000000000" -ForceMFA $true -SaveToCache $SaveToCache
+        return Get-AccessToken -ClientId 1b730954-1685-4b74-9bfd-dac224a7b894 -Resource "0000000c-0000-0000-c000-000000000000" -ForceMFA $true -Credentials $Credentials -SaveToCache $SaveToCache
     }
 }
 
@@ -1062,7 +1080,7 @@ function Get-AccessTokenForTeams
         [Parameter(Mandatory=$False)]
         [String]$Tenant,
         [Parameter(Mandatory=$False)]
-        [ValidateSet("https://api.spaces.skype.com", "https://outlook.com", "https://*.microsoftstream.com")]
+        [ValidateSet("https://api.spaces.skype.com", "https://outlook.com", "https://*.microsoftstream.com", "https://graph.microsoft.com")]
         [String]$Resource="https://api.spaces.skype.com"
     )
     Process
@@ -1134,7 +1152,7 @@ function Get-AccessTokenForAADIAMAPI
         $AccessTokens = Get-AccessToken -Resource "https://graph.windows.net" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c" -KerberosTicket $KerberosTicket -Domain $Domain -SAMLToken $SAMLToken -Credentials $Credentials -Tenant $Tenant -PRTToken $PRTToken -UseDeviceCode $UseDeviceCode -IncludeRefreshToken $True
 
         # Get the actual token
-        $AccessToken = Get-AccessTokenWithRefreshToken -Resource "74658136-14ec-4630-ad9b-26e160ff0fc6" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c" -SaveToCache $SaveToCache -RefreshToken $AccessTokens[1] -TenantId (Read-AADIntAccesstoken $AccessTokens[0]).tid
+        $AccessToken = Get-AccessTokenWithRefreshToken -Resource "74658136-14ec-4630-ad9b-26e160ff0fc6" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c" -SaveToCache $SaveToCache -RefreshToken $AccessTokens[1] -TenantId (Read-Accesstoken $AccessTokens[0]).tid
 
         if(!$SaveToCache)
         {
@@ -1321,10 +1339,88 @@ function Get-AccessTokenForAdmin
     }
 }
 
+# Gets an access token for onenote.com
+# Feb 2nd 2022
+function Get-AccessTokenForOneNote
+{
+<#
+    .SYNOPSIS
+    Gets OAuth Access Token for onenote.com
+
+    .DESCRIPTION
+    Gets OAuth Access Token for onenote.com
+
+    .Parameter Credentials
+    Credentials of the user.
+
+    .Parameter PRT
+    PRT token of the user.
+
+    .Parameter SAML
+    SAML token of the user. 
+
+    .Parameter UserPrincipalName
+    UserPrincipalName of the user of Kerberos token
+
+    .Parameter KerberosTicket
+    Kerberos token of the user. 
+    
+    .Parameter UseDeviceCode
+    Use device code flow.
+    
+    .Example
+    Get-AADIntAccessTokenForAdmin
+    
+    .Example
+    PS C:\>Get-AADIntAccessTokenForAdmin -SaveToCache
+#>
+    [cmdletbinding()]
+    Param(
+        [Parameter(ParameterSetName='Credentials',Mandatory=$False)]
+        [System.Management.Automation.PSCredential]$Credentials,
+        [Parameter(ParameterSetName='PRT',Mandatory=$True)]
+        [String]$PRTToken,
+        [Parameter(ParameterSetName='SAML',Mandatory=$True)]
+        [String]$SAMLToken,
+        [Parameter(ParameterSetName='Kerberos',Mandatory=$True)]
+        [String]$KerberosTicket,
+        [Parameter(ParameterSetName='Kerberos',Mandatory=$True)]
+        [String]$Domain,
+        [Parameter(ParameterSetName='DeviceCode',Mandatory=$True)]
+        [switch]$UseDeviceCode,
+        [switch]$SaveToCache,
+        [Parameter(Mandatory=$False)]
+        [String]$Tenant
+    )
+    Process
+    {
+        Get-AccessToken -Resource "https://onenote.com" -ClientId "1fec8e78-bce4-4aaf-ab1b-5451cc387264" -KerberosTicket $KerberosTicket -Domain $Domain -SAMLToken $SAMLToken -Credentials $Credentials -SaveToCache $SaveToCache -Tenant $Tenant -PRTToken $PRTToken -UseDeviceCode $UseDeviceCode
+    }
+}
+
 # Gets the access token for provisioning API and stores to cache
 # Refactored Jun 8th 2020
 function Get-AccessToken
 {
+<#
+    .SYNOPSIS
+    Gets OAuth Access Token for the given client and resource. Using the given authentication method. If not provided, uses interactive logon.
+
+    .DESCRIPTION
+    Gets OAuth Access Token for the given client and resource. Using the given authentication method. If not provided, uses interactive logon.
+    
+    .Example
+    $at=Get-AADIntAccessToken -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c" -Resource "https://graph.microsoft.com" 
+    
+    .Example
+    Get-AADIntAccessToken -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c" -Resource "https://graph.microsoft.com" -SaveToCache $true -IncludeRefreshToken $true
+    AccessToken saved to cache.
+
+    Tenant   : 9779e97e-de19-45be-87ab-a7ed3e86fa62
+    User     : user@company.com
+    Resource : https://graph.microsoft.com
+    Client   : d3590ed6-52b3-4102-aeff-aad2292ab01c
+#>
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory=$False)]
@@ -1382,6 +1478,7 @@ function Get-AccessToken
             "c7d28c4f-0d2c-49d6-a88d-a275cc5473c7" # https://www.microsoftazuresponsorships.com/
             "04b07795-8ddb-461a-bbee-02f9e1bf7b46" # Azure CLI
             "ecd6b820-32c2-49b6-98a6-444530e5a77a" # Edge
+            "1950a258-227b-4e31-a9cf-717495945fc2" # Microsoft Azure PowerShell
         )
     }
     Process
@@ -1432,6 +1529,12 @@ function Get-AccessToken
                 else
                 {
                     $OAuthInfo = Prompt-Credentials -Resource "https://graph.windows.net" -ClientId $ClientId -Tenant $Tenant -ForceMFA $ForceMFA
+                }
+
+                # Just return null
+                if(!$OAuthInfo)
+                {
+                    return $null
                 }
                 
             }
@@ -1550,6 +1653,18 @@ function Get-AccessToken
 # Jun 8th 2020
 function Get-AccessTokenWithRefreshToken
 {
+<#
+    .SYNOPSIS
+    Gets OAuth Access Token for the given client and resource using the given refresh token.
+
+    .DESCRIPTION
+    Gets OAuth Access Token for the given client and resource using the given refresh token.
+    For FOCI refresh tokens, i.e.,Family Refresh Tokens (FRTs), you can use any FOCI client id.
+    
+    .Example
+    PS:\>$tokens=Get-AADIntAccessToken -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c" -Resource "https://graph.microsoft.com" -IncludeRefreshToken $true
+    PS:\>$at=Get-AADIntAccessTokenWithRefreshToken -ClientId "1fec8e78-bce4-4aaf-ab1b-5451cc387264" -Resource "https://graph.windows.net" -TenantId "company.com" -RefreshToken $tokens[1] 
+#>
     [cmdletbinding()]
     Param(
         [String]$Resource,
@@ -1920,5 +2035,62 @@ function Get-AccessTokenUsingAADGraph
 
         # Return
         $AccessToken
+    }
+}
+
+# Apr 22th 2022
+function Unprotect-EstsAuthPersistentCookie
+{
+<#
+    .SYNOPSIS
+    Decrypts and dumps users stored in ESTSAUTHPERSISTENT 
+
+    .DESCRIPTION
+    Decrypts and dumps users stored in ESTSAUTHPERSISTENT using login.microsoftonline.com/forgetUser
+
+    .Parameter Cookie
+    Value of ESTSAUTHPERSISTENT cookie
+    
+    .Example
+    PS C:\>Unprotect-AADIntEstsAuthPersistentCookie -Cookie 0.ARMAqlCH3MZuvUCNgTAd4B7IRffhvoluXopNnz3s1gEl...
+
+    name       : Some User
+    login      : user@company.com
+    imageAAD   : work_account.png
+    imageMSA   : personal_account.png
+    isLive     : False
+    isGuest    : False
+    link       : user@company.com
+    authUrl    : 
+    isSigned   : True
+    sessionID  : 1fb5e6b3-09a4-4ceb-bcad-3d6d0ee89bf7
+    domainHint : 
+    isWindows  : False
+
+    name       : Another User
+    login      : user2@company.com
+    imageAAD   : work_account.png
+    imageMSA   : personal_account.png
+    isLive     : False
+    isGuest    : False
+    link       : user2@company.com
+    authUrl    : 
+    isSigned   : False
+    sessionID  : 1fb5e6b3-09a4-4ceb-bcad-3d6d0ee89bf7
+    domainHint : 
+    isWindows  : False
+#>
+
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True,ValueFromPipeline)]
+        [String]$Cookie
+    )
+    Process
+    {
+        $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+        
+        $session.Cookies.Add((New-Object System.Net.Cookie("ESTSAUTHPERSISTENT", $Cookie, "/", ".login.microsoftonline.com")))
+        Invoke-RestMethod -UseBasicParsing -Uri "https://login.microsoftonline.com/forgetuser?sessionid=$((New-Guid).toString())" -WebSession $session
     }
 }

