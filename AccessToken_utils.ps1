@@ -6,78 +6,48 @@
 # Unix epoch time (1.1.1970)
 $epoch = Get-Date -Day 1 -Month 1 -Year 1970 -Hour 0 -Minute 0 -Second 0 -Millisecond 0
 
-# Well known client ids
-<#
-    "graph_api"=            "1b730954-1685-4b74-9bfd-dac224a7b894" # MS Graph API
-    "aadrm"=                "90f610bf-206d-4950-b61d-37fa6fd1b224" # AADRM
-    "exo"=                  "a0c73c16-a7e3-4564-9a95-2bdf47383716" # EXO Remote PowerShell
-    "skype"=                "d924a533-3729-4708-b3e8-1d2445af35e3" # Skype
-    "www"=                  "00000006-0000-0ff1-ce00-000000000000" # Office portal
-    "o365spo"=              "00000003-0000-0ff1-ce00-000000000000" # SharePoint Online
-    "o365exo"=              "00000002-0000-0ff1-ce00-000000000000" # Exchange Online
-    "dynamicscrm"=          "00000007-0000-0000-c000-000000000000" # Dynamics CRM
-    "o365suiteux"=          "4345a7b9-9a63-4910-a426-35363201d503" # O365 Suite UX
-    "aadsync"=              "cb1056e2-e479-49de-ae31-7812af012ed8" # Azure AD Sync
-    "aadconnectv2"=         "6eb59a73-39b2-4c23-a70f-e2e3ce8965b1" # AAD Connect v2
-    "synccli"=              "1651564e-7ce4-4d99-88be-0a65050d8dc3" # Sync client
-    "azureadmin" =          "c44b4083-3bb0-49c1-b47d-974e53cbdf3c" # Azure Admin web ui
-    "pta" =                 "cb1056e2-e479-49de-ae31-7812af012ed8" # Pass-through authentication
-    "patnerdashboard" =     "4990cffe-04e8-4e8b-808a-1175604b879"  # Partner dashboard (missing on letter?)
-    "webshellsuite" =       "89bee1f7-5e6e-4d8a-9f3d-ecd601259da7" # Office365 Shell WCSS-Client
-    "teams" =               "1fec8e78-bce4-4aaf-ab1b-5451cc387264" # Teams
-    "office" =              "d3590ed6-52b3-4102-aeff-aad2292ab01c" # Office, ref. https://docs.microsoft.com/en-us/office/dev/add-ins/develop/register-sso-add-in-aad-v2
-    "office_online2" =      "57fb890c-0dab-4253-a5e0-7188c88b2bb4" # SharePoint Online Client
-    "office_online" =       "bc59ab01-8403-45c6-8796-ac3ef710b3e3" # Outlook Online Add-in App
-    "powerbi_contentpack" = "2a0c3efa-ba54-4e55-bdc0-770f9e39e9ee" # PowerBI content pack
-    "aad_account" =         "0000000c-0000-0000-c000-000000000000" # https://account.activedirectory.windowsazure.com
-    "sara" =                "d3590ed6-52b3-4102-aeff-aad2292ab01c" # Microsoft Support and Recovery Assistant (SARA)
-    "office_mgmt" =         "389b1b32-b5d5-43b2-bddc-84ce938d6737" # Office Management API Editor https://manage.office.com 
-    "onedrive" =            "ab9b8c07-8f02-4f72-87fa-80105867a763" # OneDrive Sync Engine
-    "adibizaux" =           "74658136-14ec-4630-ad9b-26e160ff0fc6" # Azure portal UI "ADIbizaUX"
-    "msmamservice" =        "27922004-5251-4030-b22d-91ecd9a37ea4" # MS MAM Service API
-    "teamswebclient" =      "5e3ce6c0-2b1f-4285-8d4b-75ee78787346" # Teams web client
-    "azuregraphclientint" = "7492bca1-9461-4d94-8eb8-c17896c61205" # Microsoft Azure Graph Client Library 2.1.9 Internal
-    "azure_mgmt" =          "84070985-06ea-473d-82fe-eb82b4011c9d" # Windows Azure Service Management API
-    "az" =                  "1950a258-227b-4e31-a9cf-717495945fc2" # AZ PowerShell Module
-                            "f8d98a96-0999-43f5-8af3-69971c7bb423" # Apple Internet Accounts
-                            "7f59a773-2eaf-429c-a059-50fc5bb28b44" # https://docs.microsoft.com/en-us/rest/api/authorization/globaladministrator/elevateaccess#code-try-0
-                            "9bc3ab49-b65d-410a-85ad-de819febfddc" # SPO Management Shell
-                            "06c6433f-4fb8-4670-b2cd-408938296b8e" # AAD Pin redemption client
-                            "19db86c3-b2b9-44cc-b339-36da233a3be2" # https://mysignins.microsoft.com
-                            "00b41c95-dab0-4487-9791-b9d2c32c80f2" # Office 365 Management (mobile app)
-                            "29d9ed98-a469-4536-ade2-f981bc1d605e" # Microsoft Authentication Broker (Azure MDM client)
-                            "6f7e0f60-9401-4f5b-98e2-cf15bd5fd5e3" # Microsoft.AAD.BrokerPlugin resource:https://cs.dds.microsoft.com
-                            "38aa3b87-a06d-4817-b275–7a316988d93b" # Microsoft AAD Cloud AP
-                            "0c1307d4-29d6-4389-a11c-5cbe7f65d7fa" # Azure Android App
-                            "6c7e8096-f593-4d72-807f-a5f86dcc9c77" # Intune MAM client resource:https://intunemam.microsoftonline.com
-                            "4813382a-8fa7-425e-ab75-3b753aab3abb" # Authenticator App resource:ff9ebd75-fe62-434a-a6ce-b3f0a8592eaf
-                            "1fec8e78-bce4-4aaf-ab1b-5451cc387264" # Teams client
-                            "de0853a1-ab20-47bd-990b-71ad5077ac7b" # Windows Configuration Designer (WCD)
-                            "b90d5b8f-5503-4153-b545-b31cecfaece2" # AADJ CSP
-                            "fb78d390-0c51-40cd-8e17-fdbfab77341b" # Microsoft Exchange REST API Based Powershell
-                            "18ed3507-a475-4ccb-b669-d66bc9f2a36e" # Microsoft_AAD_RegisteredApps
-                            "3f1abb3f-12cc-42c3-ad06-5b608dc5fb67" # Microsoft Intune multi-tenant management UX extension
-                            "810dcf14-1858-4bf2-8134-4c369fa3235b" # Azure AD Identity Governance - Entitlement Management
-#>
+# FOCI client ids
+# Ref: https://github.com/secureworks/family-of-client-ids-research/blob/main/known-foci-clients.csv
 
-
-# AccessToken resource strings
-<#
-$resources=@{
-    "aad_graph_api"=         "https://graph.windows.net"
-    "ms_graph_api"=          "https://graph.microsoft.com"
-    "azure_mgmt_api" =       "https://management.azure.com"
-    "windows_net_mgmt_api" = "https://management.core.windows.net/"
-    "cloudwebappproxy" =     "https://proxy.cloudwebappproxy.net/registerapp"
-    "officeapps" =           "https://officeapps.live.com"
-    "outlook" =              "https://outlook.office365.com"
-    "webshellsuite" =        "https://webshell.suite.office.com"
-    "sara" =                 "https://api.diagnostics.office.com"
-    "office_mgmt" =          "https://manage.office.com"
-    "msmamservice" =         "https://msmamservice.api.application"
-    "spacesapi" =            "https://api.spaces.skype.com"
+$FOCIs = @{
+    "00b41c95-dab0-4487-9791-b9d2c32c80f2" = "Office 365 Management"
+    "04b07795-8ddb-461a-bbee-02f9e1bf7b46" = "Microsoft Azure CLI"
+    "1950a258-227b-4e31-a9cf-717495945fc2" = "Microsoft Azure PowerShell"
+    "1fec8e78-bce4-4aaf-ab1b-5451cc387264" = "Microsoft Teams"
+    "26a7ee05-5602-4d76-a7ba-eae8b7b67941" = "Windows Search"
+    "27922004-5251-4030-b22d-91ecd9a37ea4" = "Outlook Mobile"
+    "4813382a-8fa7-425e-ab75-3b753aab3abb" = "Microsoft Authenticator App"
+    "ab9b8c07-8f02-4f72-87fa-80105867a763" = "OneDrive SyncEngine"
+    "d3590ed6-52b3-4102-aeff-aad2292ab01c" = "Microsoft Office"
+    "872cd9fa-d31f-45e0-9eab-6e460a02d1f1" = "Visual Studio"
+    "af124e86-4e96-495a-b70a-90f90ab96707" = "OneDrive iOS App"
+    "2d7f3606-b07d-41d1-b9d2-0d0c9296a6e8" = "Microsoft Bing Search for Microsoft Edge"
+    "844cca35-0656-46ce-b636-13f48b0eecbd" = "Microsoft Stream Mobile Native"
+    "87749df4-7ccf-48f8-aa87-704bad0e0e16" = "Microsoft Teams - Device Admin Agent"
+    "cf36b471-5b44-428c-9ce7-313bf84528de" = "Microsoft Bing Search"
+    "0ec893e0-5785-4de6-99da-4ed124e5296c" = "Office UWP PWA"
+    "22098786-6e16-43cc-a27d-191a01a1e3b5" = "Microsoft To-Do client"
+    "4e291c71-d680-4d0e-9640-0a3358e31177" = "PowerApps"
+    "57336123-6e14-4acc-8dcf-287b6088aa28" = "Microsoft Whiteboard Client"
+    "57fcbcfa-7cee-4eb1-8b25-12d2030b4ee0" = "Microsoft Flow"
+    "66375f6b-983f-4c2c-9701-d680650f588f" = "Microsoft Planner"
+    "9ba1a5c7-f17a-4de9-a1f1-6178c8d51223" = "Microsoft Intune Company Portal"
+    "a40d7d7d-59aa-447e-a655-679a4107e548" = "Accounts Control UI"
+    "a569458c-7f2b-45cb-bab9-b7dee514d112" = "Yammer iPhone"
+    "b26aadf8-566f-4478-926f-589f601d9c74" = "OneDrive"
+    "c0d2a505-13b8-4ae0-aa9e-cddd5eab0b12" = "Microsoft Power BI"
+    "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0" = "SharePoint"
+    "e9c51622-460d-4d3d-952d-966a5b1da34c" = "Microsoft Edge"
+    "eb539595-3fe1-474e-9c1d-feb3625d1be5" = "Microsoft Tunnel"
+    "ecd6b820-32c2-49b6-98a6-444530e5a77a" = "Microsoft Edge"
+    "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d" = "SharePoint Android"
+    "f44b1140-bc5e-48c6-8dc0-5cf5a53c0e34" = "Microsoft Edge"
+    "be1918be-3fe3-4be9-b32b-b542fc27f02e" = "M365 Compliance Drive Client"
+    "cab96880-db5b-4e15-90a7-f3f1d62ffe39" = "Microsoft Defender Platform"
+    "d7b530a4-7680-4c23-a8bf-c52c121d2e87" = "Microsoft Edge Enterprise New Tab Page"
+    "dd47d17a-3194-4d86-bfd5-c6ae6f5651e3" = "Microsoft Defender for Mobile"
+    "e9b154d0-7658-433b-bb25-6b8e0a8a7c59" = "Outlook Lite"
 }
-#>
 
 # Stored tokens (access & refresh)
 $tokens=@{}
@@ -422,22 +392,31 @@ function Get-CredentialType
         [Parameter(Mandatory=$True)]
         [String]$UserName,
         [Parameter(Mandatory=$False)]
-        [String]$FlowToken
-
+        [String]$FlowToken,
+        [Parameter(Mandatory=$False)]
+        [String]$OriginalRequest
     )
     Process
     {
         # Create a body for REST API request
         $body = @{
             "username"=$UserName
-            "isOtherIdpSupported"="true"
-	        "checkPhones"="true"
-	        "isRemoteNGCSupported"="false"
-	        "isCookieBannerShown"="false"
-	        "isFidoSupported"="false"
-            "originalRequest"=""
-            "flowToken"=$FlowToken
+            "isOtherIdpSupported"  = $true
+	        "checkPhones"          = $true
+	        "isRemoteNGCSupported" = $false
+	        "isCookieBannerShown"  = $false
+	        "isFidoSupported"      = $false
+            "originalRequest"      = $OriginalRequest
+            "flowToken"            = $FlowToken
         }
+
+        # TAP support can only be requested if originalRequest is provided. Otherwise we'll get error code 6000.
+        if(![string]::IsNullOrEmpty($OriginalRequest))
+        {
+            $body["isAccessPassSupported"] = $true
+        }
+
+        
       
         # Call the API
         $userRealm=Invoke-RestMethod -UseBasicParsing -Uri ("https://login.microsoftonline.com/common/GetCredentialType") -ContentType "application/json; charset=UTF-8" -Method POST -Body ($body|ConvertTo-Json)
@@ -560,14 +539,13 @@ function Get-TenantID
 
             Try
             {
-                $OpenIdConfig = Get-OpenIDConfiguration -Domain $domain
+                $TenantId = (Invoke-RestMethod -UseBasicParsing -Uri "https://odc.officeapps.live.com/odc/v2.1/federationprovider?domain=$domain").TenantId
             }
             catch
             {
                 return $null
             }
 
-            $TenantId = $OpenIdConfig.authorization_endpoint.Split("/")[3]
         }
         else
         {
@@ -799,13 +777,20 @@ function Get-OAuthInfo
         [Parameter(Mandatory=$True)]
         [String]$Resource,
         [Parameter(Mandatory=$False)]
-        [String]$ClientId="1b730954-1685-4b74-9bfd-dac224a7b894"
+        [String]$ClientId="1b730954-1685-4b74-9bfd-dac224a7b894",
+        [Parameter(Mandatory=$False)]
+        [String]$Tenant="common"
     )
     Begin
     {
         # Create the headers. We like to be seen as Outlook.
         $headers = @{
             "User-Agent" = "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 10.0; WOW64; Trident/7.0; .NET4.0C; .NET4.0E; Tablet PC 2.0; Microsoft Outlook 16.0.4266)"
+        }
+
+        if([string]::IsNullOrEmpty($Tenant))
+        {
+            $Tenant="common"
         }
     }
     Process
@@ -841,7 +826,7 @@ function Get-OAuthInfo
             $contentType="application/x-www-form-urlencoded"
             try
             {
-                $jsonResponse=Invoke-RestMethod -UseBasicParsing -Uri "https://login.microsoftonline.com/common/oauth2/token" -ContentType $contentType -Method POST -Body $body -Headers $headers
+                $jsonResponse=Invoke-RestMethod -UseBasicParsing -Uri "https://login.microsoftonline.com/$Tenant/oauth2/token" -ContentType $contentType -Method POST -Body $body -Headers $headers
             }
             catch
             {
@@ -1089,351 +1074,118 @@ function Read-Accesstoken
 
 
 # Prompts for credentials and gets the access token
-# Supports MFA, federation, etc.
+# Supports MFA.
 function Prompt-Credentials
 {
     [cmdletbinding()]
     Param(
-        [Parameter(Mandatory=$True)]
+        [Parameter(Mandatory=$False)]
         [String]$Resource,
-        [String]$ClientId="1b730954-1685-4b74-9bfd-dac224a7b894" <# graph_api #>,
+        [Parameter(Mandatory=$False)]
+        [String]$ClientId,
         [Parameter(Mandatory=$False)]
         [String]$Tenant,
         [Parameter(Mandatory=$False)]
-        [bool]$ForceMFA=$false
+        [bool]$ForceMFA=$false,
+        [Parameter(Mandatory=$False)]
+        [bool]$ForceNGCMFA=$false,
+        [Parameter(Mandatory=$False)]
+        [string]$RefreshTokenCredential,
+        [Parameter(Mandatory=$False)]
+        [System.Management.Automation.PSCredential]$Credentials,
+        [Parameter(Mandatory=$False)]
+        [string]$OTPSecretKey,
+        [Parameter(Mandatory=$False)]
+        [string]$TAP
     )
     Process
     {
-        # Check the tenant
-        if([String]::IsNullOrEmpty($Tenant))        
+        # User-Agent
+        $userAgent = Get-Setting -Setting "User-Agent"
+        if([string]::IsNullOrEmpty($userAgent))
         {
-            $Tenant = "common"
+            $userAgent = "AADInternals"
         }
 
-        # Set variables
-        $auth_redirect= Get-AuthRedirectUrl -ClientId $ClientId -Resource $Resource
-        $client_id=     $ClientId # Usually should be graph_api
-                        
-        # Create the url
-        $request_id=(New-Guid).ToString()
-        $url="https://login.microsoftonline.com/$Tenant/oauth2/authorize?resource=$Resource&client_id=$client_id&response_type=code&haschrome=1&redirect_uri=$auth_redirect&client-request-id=$request_id&prompt=login&scope=openid profile"
-
+        # Set AMR values as needed
+        $amr = $null
         if($ForceMFA)
         {
-            $url+="&amr_values=mfa"
+            $amr = "mfa"
         }
-
-        # Azure AD Join
-        if($ClientId -eq "29d9ed98-a469-4536-ade2-f981bc1d605e" -and $Resource -ne "https://enrollment.manage.microsoft.com/") 
+        elseif($ForceNGCMFA)
         {
-                $auth_redirect="ms-aadj-redir://auth/drs"
+            $amr = "ngcmfa"
         }
 
-        # Create the form
-        $form = Create-LoginForm -Url $url -auth_redirect $auth_redirect
-
-        if(!$form)
+        # If we have credentials, try first using ROPC flow
+        $response = $null
+        if($Credentials -and [string]::IsNullOrEmpty($amr))
         {
-            return $null
-        }
+            Write-Verbose "Credentials provided and no MFA enforced, trying ROPC flow."
 
-        # Show the form and wait for the return value
-        if($form.ShowDialog() -ne "OK") {
-            # Dispose the controls
-            $form.Controls[1].Dispose()
-            $form.Controls[0].Dispose()
-            $form.Dispose()
-            Write-Verbose "Login cancelled"
-            return $null
-        }
+            # Create a body for REST API request
+            $body = @{
+                "resource"=$Resource
+                "client_id"=$ClientId
+                "grant_type"="password"
+                "username"=$Credentials.UserName
+                "password"=$Credentials.GetNetworkCredential().Password
+                "scope"="openid"
+            }
 
-        # Parse the query string
-        $response = [Web.HttpUtility]::ParseQueryString($form.Controls[0].Url.Query)
+            # Debug
+            Write-Debug "AUTHENTICATION BODY: $($body | Out-String)"
 
-        # Create a body for REST API request
-        $body = @{
-            client_id=$client_id
-            grant_type="authorization_code"
-            code=$response["code"]
-            redirect_uri=$auth_redirect
-        }
-        
-        # Dispose the controls
-        $form.Controls[1].Dispose()
-        $form.Controls[0].Dispose()
-        $form.Dispose()
-
-        # Debug
-        Write-Debug "AUTHENTICATION BODY: $($body | Out-String)"
-
-        # Set the content type and call the Microsoft Online authentication API
-        $contentType="application/x-www-form-urlencoded"
-        $jsonResponse=Invoke-RestMethod -UseBasicParsing -Uri "https://login.microsoftonline.com/$Tenant/oauth2/token" -ContentType $contentType -Method POST -Body $body
-
-        # return 
-        $jsonResponse
-    }
-}
-
-
-
-# Logs out the web sessions from LiveId
-# Aug 10th 2018
-function Clear-LiveIdSession
-{
-
-<#
-    .SYNOPSIS
-    Clear the SharePoint Online login session.
-
-    .DESCRIPTION
-    Clear the SharePoint Online login session created by Get-AADIntIdentityTokenByLiveId function.
-
-    .Parameter Tenant
-    The tenant name to login in to WITHOUT .sharepoint.com part
-    
-    .Example
-    PS C:\>Clear-AADIntLiveIdSession -Tenant mytenant
-#>
-    [cmdletbinding()]
-    Param(
-        [Parameter(Mandatory=$True)]
-        [String]$Tenant
-    )
-    Process
-    {
-        # Set variables
-        $auth_redirect="https://login.microsoftonline.com/login.srf?wa=wsignoutcleanup1.0" # When to close the form
-        $url="https://$tenant.sharepoint.com/_layouts/15/SignOut.aspx"
-
-        # Create the form
-        $form=Create-LoginForm -Url $url -auth_redirect $auth_redirect
-
-        if(!$form)
-        {
-            return $null
-        }
-
-        # Show the form and wait for the return value
-        $form.ShowDialog()
-
-        # Clear the webbrowser control
-        Clear-WebBrowser
-    }
-}
-
-# Creates an interactive login form based on given url and auth_redirect.
-# Aug 10th 2018
-function Create-LoginForm
-{
-    [cmdletbinding()]
-    Param(
-        [Parameter(Mandatory=$True)]
-        [String]$Url,
-        [Parameter(Mandatory=$True)]
-        [String]$auth_redirect,
-        [Parameter(Mandatory=$False)]
-        [String]$Headers
-    )
-    Process
-    {
-        # Check does the registry key exists
-        $regModified = $false
-        $regPath="HKCU:\Software\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_BROWSER_EMULATION"
-        if(!(Test-Path -Path $regPath )){
-            Write-Warning "WebBrowser control emulation registry key not found!"
-            $answer = Read-Host -Prompt "Would you like to create the registry key? (Y/N)"
-            if($answer -eq "Y")
+            # Set the content type and call the Microsoft Online authentication API
+            $contentType="application/x-www-form-urlencoded"
+            try
             {
-                New-Item -ItemType directory -Path $regPath -Force | Out-Null
-                $regModified = $true
+                $response=Invoke-RestMethod -UseBasicParsing -Uri "https://login.microsoftonline.com/common/oauth2/token" -ContentType $contentType -Method POST -Body $body -Headers $headers
+            }
+            catch
+            {
+                Write-Verbose "ROPC failed, switching to interactive flow: $(($_.ErrorDetails.Message | convertfrom-json).error_description)"
             }
         }
 
-        # Check the registry value for WebBrowser control emulation. Should be IE 11
-        $reg=Get-ItemProperty -Path $regPath
-
-        if([String]::IsNullOrEmpty($reg.'powershell.exe') -or [String]::IsNullOrEmpty($reg.'powershell_ise.exe'))
+        if($null -eq $response)
         {
-            Write-Warning "WebBrowser control emulation not set for PowerShell or PowerShell ISE!"
-            $answer = Read-Host -Prompt "Would you like set the emulation to IE 11? Otherwise the login form may not work! (Y/N)"
-            if($answer -eq "Y")
+            # Check the tenant
+            if([string]::IsNullOrEmpty($Tenant))
             {
-                Set-ItemProperty -Path $regPath -Name "powershell_ise.exe" -Value 0x00002af9 | Out-Null
-                Set-ItemProperty -Path $regPath -Name "powershell.exe"     -Value 0x00002af9 | Out-Null
-                $regModified = $true
+                $Tenant = "common"
             }
-        }
 
-        if($regModified)
-        {
-            Write-Host "Emulation set. Restart PowerShell/ISE!"
-            return $null
-        }
+            # Get the authorization code
+            $authorizationCode = Get-AuthorizationCode -Resource $Resource -ClientId $ClientId -Tenant $Tenant -AMR $amr -RefreshTokenCredential $RefreshTokenCredential -UserAgent $userAgent -Credentials $Credentials -OTPSecretKey $OTPSecretKey -TAP $TAP
 
-        # Create the form and add a WebBrowser control to it
-        $form = New-Object Windows.Forms.Form
-        $form.Width = 560
-        $form.Height = 680
-        $form.FormBorderStyle=[System.Windows.Forms.FormBorderStyle]::FixedDialog
-        $form.TopMost = $true
+            if($authorizationCode)
+            {
+                # Construct the body for auth code grant
+                $body = @{
+                    client_id    = $ClientId
+                    grant_type   = "authorization_code"
+                    code         = $authorizationCode
+                    redirect_uri = Get-AuthRedirectUrl -ClientId $ClientId -Resource $Resource
+                }
 
-        $web = New-Object Windows.Forms.WebBrowser
-        $web.Size = $form.ClientSize
-        $web.Anchor = "Left,Top,Right,Bottom"
-        $form.Controls.Add($web)
-
-        $field = New-Object Windows.Forms.TextBox
-        $field.Visible = $false
-        $form.Controls.Add($field)
-		$field.Text = $auth_redirect
-
-        # Clear WebBrowser control cache
-        Clear-WebBrowser
-
-        # Add an event listener to track down where the browser is
-        $web.add_Navigated({
-            # If the url matches the redirect url, close with OK.
-            $curl=$_.Url.ToString()
-			$auth_redirect = $form.Controls[1].Text							   
-            Write-Debug "NAVIGATED TO: $($curl)"
-            if($curl.StartsWith($auth_redirect)) {
-
-                # Hack for Azure Portal Login. Jul 11th 2019 
-                # Check whether the body has the Bearer
-                if(![String]::IsNullOrEmpty($form.Controls[0].Document.GetElementsByTagName("script")))
-                {
-                    $script=$form.Controls[0].Document.GetElementsByTagName("script").outerhtml
-                    if($script.Contains('"oAuthToken":')){
-                        $s=$script.IndexOf('"oAuthToken":')+13
-                        $e=$script.IndexOf('}',$s)+1
-                        $oAuthToken=$script.Substring($s,$e-$s) | ConvertFrom-Json
-                        $at=$oAuthToken.authHeader.Split(" ")[1]
-                        $rt=$oAuthToken.refreshToken
-                        $script:AccessToken = @{"access_token"=$at; "refresh_token"=$rt}
-                        Write-Debug "ACCESSTOKEN $script:accessToken"
-                    }
-                    elseif($curl.StartsWith("https://portal.azure.com"))
-                    {
-                        Write-Debug "WAITING FOR THE TOKEN!"
-                        # Do nothing, wait for it..
-                        return
-                    }
+                # Headers
+                $headers = @{
+                    "Content-Type" = "application/x-www-form-urlencoded"
+                    "User-Agent"   = $userAgent
                 }
                 
-                # Add the url to the hidden field
-                #$form.Controls[1].Text = $curl
-
-                $form.DialogResult = "OK"
-                $form.Close()
-                Write-Debug "PROMPT CREDENTIALS URL: $curl"
-            } # Automatically logs in -> need to logout first
-            elseif($curl.StartsWith($url)) {
-                # All others
-                Write-Verbose "Returned to the starting url, someone already logged in?"
+                $response = Invoke-RestMethod -UseBasicParsing -Uri "https://login.microsoftonline.com/$Tenant/oauth2/token" -Method POST -Body $body -Headers $headers
             }
-        })
-
-        
-        # Add an event listener to track down where the browser is going
-        $web.add_Navigating({
-            $curl=$_.Url.ToString()
-            Write-Verbose "NAVIGATING TO: $curl"
-            # SharePoint login
-            if($curl.EndsWith("/_forms/default.aspx"))
-            {
-                $_.Cancel=$True
-                $form.DialogResult = "OK"
-                $form.Close()
-            }
-        })
-        
-#        $web.ScriptErrorsSuppressed = $True
-
-        # Set the url
-        if([String]::IsNullOrEmpty($Headers))
-        {
-            $web.Navigate($url)
-        }
-        else
-        {
-            $web.Navigate($url,"",$null,$Headers)
         }
 
-        # Return
-        return $form
+        # return 
+        return $response
     }
 }
 
-# Clear the Forms.WebBrowser data
-$source=@"
-[DllImport("wininet.dll", SetLastError = true)]
-public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int lpdwBufferLength);
 
-[DllImport("wininet.dll", SetLastError = true)]
-public static extern bool InternetGetCookieEx(string pchURL, string pchCookieName, System.Text.StringBuilder pchCookieData, ref uint pcchCookieData, int dwFlags, IntPtr lpReserved);
-"@
-#Create type from source
-$WebBrowser = Add-Type -memberDefinition $source -passthru -name WebBrowser -ErrorAction SilentlyContinue
-$INTERNET_OPTION_END_BROWSER_SESSION = 42
-$INTERNET_OPTION_SUPPRESS_BEHAVIOR   = 81
-$INTERNET_COOKIE_HTTPONLY            = 0x00002000
-$INTERNET_SUPPRESS_COOKIE_PERSIST    = 3
-function Clear-WebBrowser
-{
-    [cmdletbinding()]
-    Param(
-    )
-    Process
-    {
-        
-        # Clear the cache
-        [IntPtr] $optionPointer = [IntPtr]::Zero
-        $s =                      [System.Runtime.InteropServices.Marshal]::SizeOf($INTERNET_OPTION_END_BROWSER_SESSION)
-        $optionPointer =          [System.Runtime.InteropServices.Marshal]::AllocCoTaskMem($s)
-        [System.Runtime.InteropServices.Marshal]::WriteInt32($optionPointer, ([ref]$INTERNET_SUPPRESS_COOKIE_PERSIST).Value)
-        $status =                 $WebBrowser::InternetSetOption([IntPtr]::Zero, $INTERNET_OPTION_SUPPRESS_BEHAVIOR, $optionPointer, $s)
-        Write-Debug "Clearing Web browser cache. Status:$status"
-        [System.Runtime.InteropServices.Marshal]::Release($optionPointer)|out-null
-
-        # Clear the current session
-        $status = $WebBrowser::InternetSetOption([IntPtr]::Zero, $INTERNET_OPTION_END_BROWSER_SESSION, [IntPtr]::Zero, 0)
-        Write-Debug "Clearing Web browser. Status:$status"
-    }
-}
-
-function Get-WebBrowserCookies
-{
-    [cmdletbinding()]
-    Param(
-        [Parameter(Mandatory=$True)]
-        [String]$Url
-    )
-    Process
-    {
-        $dataSize = 1024
-        $cookieData = [System.Text.StringBuilder]::new($dataSize)
-        $status = $WebBrowser::InternetGetCookieEx($Url,$null,$cookieData, [ref]$dataSize, $INTERNET_COOKIE_HTTPONLY, [IntPtr]::Zero)
-        Write-Debug "GETCOOKIEEX Status: $status, length: $($cookieData.Length)"
-        if(!$status)
-        {
-            $LastError = [ComponentModel.Win32Exception][Runtime.InteropServices.Marshal]::GetLastWin32Error()
-            Write-Debug "GETCOOKIEEX ERROR: $LastError"
-        }
-
-        if($cookieData.Length -gt 0)
-        {
-            $cookies = $cookieData.ToString()
-            Write-Debug "Cookies for $url`: $cookies"
-            Return $cookies
-        }
-        else
-        {
-            Write-Warning "Cookies not found for $url"
-        }
-
-    }
-}
 
 
 ## GENERAL ADMIN API FUNCTIONS
@@ -1751,26 +1503,54 @@ function Add-AccessTokenToCache
         [Parameter(Mandatory=$True,ValueFromPipeline)]
         [String]$AccessToken,
         [Parameter(Mandatory=$False)]
-        [String]$RefreshToken
+        [String]$RefreshToken,
+        [Parameter(Mandatory=$False)]
+        [boolean]$ShowCache = $true
     )
     Process
     {
         # Parse the token
         $parsedToken = Read-Accesstoken -AccessToken $accessToken
         $clientId = $parsedToken.appid
-        $resource = $parsedToken.aud
+        $resource = $parsedToken.aud.TrimEnd("/")
 
         # Add to cache
         $Script:tokens["$clientId-$resource"] = $AccessToken
         if(![string]::IsNullOrEmpty($RefreshToken))
         {
-            $script:refresh_tokens["$ClientId-$Resource"] = $RefreshToken
+            Add-RefreshTokenToCache -ClientId $clientId -Resource $resource -RefreshToken $RefreshToken
         }
         
         # Dump the cache
-        Get-Cache
+        if($ShowCache)
+        {
+            Get-Cache
+        }
     }
 }
+
+# Adds refresh token to cache
+# Apr 25th 2023
+function Add-RefreshTokenToCache
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]$RefreshToken,
+        [Parameter(Mandatory=$True)]
+        [String]$ClientId,
+        [Parameter(Mandatory=$True)]
+        [String]$Resource
+    )
+    Process
+    {
+        # Strip the trailing slash
+        $Resource = $Resource.TrimEnd("/")
+        $Script:refresh_tokens["$ClientId-$Resource"] = $RefreshToken
+    }
+}
+
+
 
 # Gets other domains of the given tenant
 # Jun 15th 2020
@@ -1804,13 +1584,23 @@ function Get-TenantDomains
     )
     Process
     {
+        # Get Tenant Region Scope/Subscope from Open ID configuration
+        Try {$openIdConfig = Invoke-RestMethod -UseBasicParsing "https://login.microsoftonline.com/$Domain/.well-known/openid-configuration"}
+        catch {$openIdConfig = $null}
+        if($openIdConfig.tenant_region_sub_scope -eq "DOD") 
+            {$uri = "https://autodiscover-s-dod.office365.us/autodiscover/autodiscover.svc"} #DoD
+        elseif($openIdConfig.tenant_region_sub_scope -eq "DODCON") 
+            {$uri = "https://autodiscover-s.office365.us/autodiscover/autodiscover.svc"} # GCC-High
+        else 
+            {$uri = "https://autodiscover-s.outlook.com/autodiscover/autodiscover.svc"} #Commercial/WW
+        
         # Create the body
         $body=@"
 <?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:exm="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:ext="http://schemas.microsoft.com/exchange/services/2006/types" xmlns:a="http://www.w3.org/2005/08/addressing" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
 	<soap:Header>
 		<a:Action soap:mustUnderstand="1">http://schemas.microsoft.com/exchange/2010/Autodiscover/Autodiscover/GetFederationInformation</a:Action>
-		<a:To soap:mustUnderstand="1">https://autodiscover-s.outlook.com/autodiscover/autodiscover.svc</a:To>
+		<a:To soap:mustUnderstand="1">$uri</a:To>
 		<a:ReplyTo>
 			<a:Address>http://www.w3.org/2005/08/addressing/anonymous</a:Address>
 		</a:ReplyTo>
@@ -1831,10 +1621,15 @@ function Get-TenantDomains
             "User-Agent" =   "AutodiscoverClient"
         }
         # Invoke
-        $response = Invoke-RestMethod -UseBasicParsing -Method Post -uri "https://autodiscover-s.outlook.com/autodiscover/autodiscover.svc" -Body $body -Headers $headers
+        $response = Invoke-RestMethod -UseBasicParsing -Method Post -uri $uri -Body $body -Headers $headers
 
         # Return
-        $response.Envelope.body.GetFederationInformationResponseMessage.response.Domains.Domain | Sort-Object
+		$domains = $response.Envelope.body.GetFederationInformationResponseMessage.response.Domains.Domain
+		if($Domain -notin $domains)
+        {
+            $domains += $Domain
+        }
+        $domains | Sort-Object
     }
 }
 
@@ -1850,10 +1645,17 @@ function Get-AuthRedirectUrl
         [Parameter(Mandatory=$True)]
         [String]$Resource
     )
+    Begin
+    {
+        $oobClients = @(
+            "d3590ed6-52b3-4102-aeff-aad2292ab01c" # Microsoft Office
+            "29d9ed98-a469-4536-ade2-f981bc1d605e" # Microsoft Authentication Broker
+            )
+    }
     Process
     {
         # default
-        $redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+        $redirect_uri = "https://login.microsoftonline.com/common/oauth2/nativeclient"
 
         if($ClientId -eq "1fec8e78-bce4-4aaf-ab1b-5451cc387264")     # Teams
         {
@@ -1912,6 +1714,22 @@ function Get-AuthRedirectUrl
         elseif($ClientId -eq "08e18876-6177-487e-b8b5-cf950c1e598c") # SharePoint Online Web Client Extensibility
         {
             $redirect_uri = "https://*-admin.sharepoint.com/_forms/spfxsinglesignon.aspx"
+        }
+        elseif($ClientId -eq "29d9ed98-a469-4536-ade2-f981bc1d605e" -and $Resource -ne "https://enrollment.manage.microsoft.com/") # AADJoin
+        {
+                $auth_redirect="ms-aadj-redir://auth/drs"
+        }
+        elseif($ClientId -eq "dd762716-544d-4aeb-a526-687b73838a22") # WHfB?
+        {
+            $redirect_uri = "ms-appx-web://microsoft.aad.brokerplugin/dd762716-544d-4aeb-a526-687b73838a22"
+        }
+        elseif($ClientId -eq "4765445b-32c6-49b0-83e6-1d93765276ca") # Office Web UI
+        {
+            $redirect_uri = "https://www.office.com/landingv2"
+        }
+        elseif($oobClients -contains $ClientId)
+        {
+            $redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
         }
 
         return $redirect_uri
@@ -2497,3 +2315,1041 @@ function Export-TokenBrokerTokens
         }
     }
 }
+
+# Gets RST token 
+# Mar 3rd 2023
+function Get-RSTToken
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(ParameterSetName='Credentials',Mandatory=$True)]
+        [System.Management.Automation.PSCredential]$Credentials,
+        [Parameter(ParameterSetName='UserNameAndPassword',Mandatory=$True)]
+        [String]$UserName,
+        [Parameter(ParameterSetName='UserNameAndPassword',Mandatory=$False)]
+        [String]$Password,
+        [Parameter(Mandatory=$True)]
+        [String]$EndpointAddress,
+        [Parameter(Mandatory=$True)]
+        [String]$Url
+    )
+    Process
+    {
+        If([String]::IsNullOrEmpty($UserName))
+        {
+            $UserName = $Credentials.UserName
+            $Password = $Credentials.GetNetworkCredential().password
+        }
+        $requestId = (New-Guid).ToString()
+
+        $now = Get-Date
+        $created = $now.toUniversalTime().toString("o")
+        $expires = $now.addMinutes(10).toUniversalTime().toString("o")
+
+        
+        $body=@"
+<?xml version='1.0' encoding='UTF-8'?>
+<s:Envelope xmlns:s='http://www.w3.org/2003/05/soap-envelope' xmlns:wsse='http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd' xmlns:saml='urn:oasis:names:tc:SAML:1.0:assertion' xmlns:wsp='http://schemas.xmlsoap.org/ws/2004/09/policy' xmlns:wsu='http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd' xmlns:wsa='http://www.w3.org/2005/08/addressing' xmlns:wssc='http://schemas.xmlsoap.org/ws/2005/02/sc' xmlns:wst='http://schemas.xmlsoap.org/ws/2005/02/trust' xmlns:ic='http://schemas.xmlsoap.org/ws/2005/05/identity'>
+    <s:Header>
+        <wsa:Action s:mustUnderstand='1'>http://schemas.xmlsoap.org/ws/2005/02/trust/RST/Issue</wsa:Action>
+        <wsa:To s:mustUnderstand='1'>$url</wsa:To>
+        <wsa:MessageID>urn:uuid:$((New-Guid).ToString())</wsa:MessageID>
+        <wsse:Security s:mustUnderstand="1">
+            <wsu:Timestamp wsu:Id="_0">
+                <wsu:Created>$created</wsu:Created>
+                <wsu:Expires>$expires</wsu:Expires>
+            </wsu:Timestamp>
+            <wsse:UsernameToken wsu:Id="uuid-$((New-Guid).toString())">
+                <wsse:Username>$UserName</wsse:Username>
+                <wsse:Password>$Password</wsse:Password>
+            </wsse:UsernameToken>
+        </wsse:Security>
+    </s:Header>
+    <s:Body>
+        <wst:RequestSecurityToken Id='RST0'>
+                <wst:RequestType>http://schemas.xmlsoap.org/ws/2005/02/trust/Issue</wst:RequestType>
+                    <wsp:AppliesTo>
+                        <wsa:EndpointReference>
+                            <wsa:Address>$EndpointAddress</wsa:Address>
+                        </wsa:EndpointReference>
+                    </wsp:AppliesTo>
+                    <wst:KeyType>http://schemas.xmlsoap.org/ws/2005/05/identity/NoProofKey</wst:KeyType>
+            </wst:RequestSecurityToken>
+    </s:Body>
+</s:Envelope>
+"@
+        try
+        {
+            $response = Invoke-RestMethod -UseBasicParsing -Uri $url -Method Post -Body $body -ErrorAction SilentlyContinue
+            $tokenResponse = $response.Envelope.Body.RequestSecurityTokenResponse
+            if($tokenResponse)
+            {
+                switch($tokenResponse.TokenType)
+                {
+                    # DesktopSSOToken when EndpointAddress is:
+                    # urn:federation:MicrosoftOnline
+                    ("urn:oasis:names:tc:SAML:1.0:assertion")
+                    {
+                        $token = $tokenResponse.RequestedSecurityToken.Assertion.DesktopSsoToken
+                        break
+                    }
+                    # Passport Compact when EndpointAddress is one of:
+                    # officeapps.live.com
+                    # sharepoint.com
+                    ("urn:passport:compact")
+                    {
+                        $token = $tokenResponse.RequestedSecurityToken.BinarySecurityToken.'#text'
+                        break
+                    }
+                    # Passport Legacy when EndpointAddress is:
+                    # http://Passport.NET/tb
+                    ("urn:passport:legacy")
+                    {
+                        # TODO: Try to figure out how this is encrypted
+                        $cipherData = $tokenResponse.RequestedSecurityToken.EncryptedData.CipherData.CipherData
+                        $keyName    = $tokenResponse.RequestedSecurityToken.EncryptedData.KeyInfo.KeyName
+                        $encAlg     = $tokenResponse.RequestedSecurityToken.EncryptedData.EncryptionMethod.Algorithm
+
+                        Write-Warning "Unable to decrypt legacy passport token, returning encrypted token"
+                        $token = $cipherData
+                        break
+                    }
+                }
+
+                return $token
+            }
+            else
+            {
+                $errorDetails = $response.Envelope.Body.Fault.Detail.error.internalerror.text
+            }
+        }
+        catch
+        {
+            $stream = $_.Exception.Response.GetResponseStream()
+            $responseBytes = New-Object byte[] $stream.Length
+
+            $stream.Position = 0
+            $stream.Read($responseBytes,0,$stream.Length) | Out-Null
+            
+            $responseXml = [xml][text.encoding]::UTF8.GetString($responseBytes)
+
+            $errorDetails = $responseXml.Envelope.Body.Fault.Detail.error.internalerror.text
+        }
+        throw $errorDetails
+    }
+}
+
+
+# Checks whether the client is a FOCI clientid 
+# Apr 25th 2023
+function IsFOCI
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [guid]$ClientId,
+        [Parameter(Mandatory=$False)]
+        [int]$FOCI = -1
+        )
+    Process
+    {
+        # If FOCI = 1 this is 100% a FOCI client
+
+        # Is this a known FOCI client?
+        $isFOCI = $Script:FOCIs.ContainsKey($ClientId.ToString())
+
+        Write-Verbose "FOCI: Known FOCI $isFOCI, FOCI indicator $FOCI"
+        
+        # Is this a new or deprecated FOCI client?
+        if($isFOCI -and $FOCI -eq 0)
+        {
+            # Found in FOCI list, but no FOCI indicator present
+            Write-Warning "Found deprecated FOCI client $ClientId. Please report at https://github.com/secureworks/family-of-client-ids-research"
+            $isFOCI = $False
+        }
+        elseif ($FOCI -eq 1 -and -not $isFOCI)
+        {
+            # Not found on FOCI list, but FOCI indicator present
+            Write-Warning "Found a new FOCI client $ClientId. Please report at https://github.com/secureworks/family-of-client-ids-research"
+            $Script:FOCIs[$ClientId] = "UNKNOWN"
+            $isFOCI = $True
+        }
+
+        return $isFOCI
+    }
+}
+
+# Lists FOCI clients 
+# Apr 26th 2023
+function Get-FOCIClientIDs
+{
+<#
+    .SYNOPSIS
+    Dumps the list of known FOCI client ids
+
+    .DESCRIPTION
+    Dumps the list of Family of known Client IDs (FOCI) client ids
+
+    .Parameter Online
+    Get's list online from https://raw.githubusercontent.com/secureworks/family-of-client-ids-research/main/known-foci-clients.csv
+
+    .Example
+    PS C:\>Get-AADIntFOCIClientIDs
+
+    client_id                            application_name                        
+    ---------                            ----------------                        
+    00b41c95-dab0-4487-9791-b9d2c32c80f2 Office 365 Management                   
+    04b07795-8ddb-461a-bbee-02f9e1bf7b46 Microsoft Azure CLI                     
+    1950a258-227b-4e31-a9cf-717495945fc2 Microsoft Azure PowerShell              
+    1fec8e78-bce4-4aaf-ab1b-5451cc387264 Microsoft Teams                         
+    26a7ee05-5602-4d76-a7ba-eae8b7b67941 Windows Search                          
+    27922004-5251-4030-b22d-91ecd9a37ea4 Outlook Mobile                          
+    4813382a-8fa7-425e-ab75-3b753aab3abb Microsoft Authenticator App             
+    ab9b8c07-8f02-4f72-87fa-80105867a763 OneDrive SyncEngine                     
+    d3590ed6-52b3-4102-aeff-aad2292ab01c Microsoft Office                        
+    872cd9fa-d31f-45e0-9eab-6e460a02d1f1 Visual Studio                           
+    af124e86-4e96-495a-b70a-90f90ab96707 OneDrive iOS App                        
+    2d7f3606-b07d-41d1-b9d2-0d0c9296a6e8 Microsoft Bing Search for Microsoft Edge
+    844cca35-0656-46ce-b636-13f48b0eecbd Microsoft Stream Mobile Native          
+    87749df4-7ccf-48f8-aa87-704bad0e0e16 Microsoft Teams - Device Admin Agent    
+    cf36b471-5b44-428c-9ce7-313bf84528de Microsoft Bing Search                   
+    0ec893e0-5785-4de6-99da-4ed124e5296c Office UWP PWA                          
+    22098786-6e16-43cc-a27d-191a01a1e3b5 Microsoft To-Do client                  
+    4e291c71-d680-4d0e-9640-0a3358e31177 PowerApps                               
+    57336123-6e14-4acc-8dcf-287b6088aa28 Microsoft Whiteboard Client             
+    57fcbcfa-7cee-4eb1-8b25-12d2030b4ee0 Microsoft Flow                          
+    66375f6b-983f-4c2c-9701-d680650f588f Microsoft Planner                       
+    9ba1a5c7-f17a-4de9-a1f1-6178c8d51223 Microsoft Intune Company Portal         
+    a40d7d7d-59aa-447e-a655-679a4107e548 Accounts Control UI                     
+    a569458c-7f2b-45cb-bab9-b7dee514d112 Yammer iPhone                           
+    b26aadf8-566f-4478-926f-589f601d9c74 OneDrive                                
+    c0d2a505-13b8-4ae0-aa9e-cddd5eab0b12 Microsoft Power BI                      
+    d326c1ce-6cc6-4de2-bebc-4591e5e13ef0 SharePoint                              
+    e9c51622-460d-4d3d-952d-966a5b1da34c Microsoft Edge                          
+    eb539595-3fe1-474e-9c1d-feb3625d1be5 Microsoft Tunnel                        
+    ecd6b820-32c2-49b6-98a6-444530e5a77a Microsoft Edge                          
+    f05ff7c9-f75a-4acd-a3b5-f4b6a870245d SharePoint Android                      
+    f44b1140-bc5e-48c6-8dc0-5cf5a53c0e34 Microsoft Edge
+
+    .Example
+    PS C:\>Get-AADIntFOCIClientIDs -Online
+
+    client_id                            application_name                        
+    ---------                            ----------------                        
+    00b41c95-dab0-4487-9791-b9d2c32c80f2 Office 365 Management                   
+    04b07795-8ddb-461a-bbee-02f9e1bf7b46 Microsoft Azure CLI                     
+    1950a258-227b-4e31-a9cf-717495945fc2 Microsoft Azure PowerShell              
+    1fec8e78-bce4-4aaf-ab1b-5451cc387264 Microsoft Teams                         
+    26a7ee05-5602-4d76-a7ba-eae8b7b67941 Windows Search                          
+    27922004-5251-4030-b22d-91ecd9a37ea4 Outlook Mobile                          
+    4813382a-8fa7-425e-ab75-3b753aab3abb Microsoft Authenticator App             
+    ab9b8c07-8f02-4f72-87fa-80105867a763 OneDrive SyncEngine                     
+    d3590ed6-52b3-4102-aeff-aad2292ab01c Microsoft Office                        
+    872cd9fa-d31f-45e0-9eab-6e460a02d1f1 Visual Studio                           
+    af124e86-4e96-495a-b70a-90f90ab96707 OneDrive iOS App                        
+    2d7f3606-b07d-41d1-b9d2-0d0c9296a6e8 Microsoft Bing Search for Microsoft Edge
+    844cca35-0656-46ce-b636-13f48b0eecbd Microsoft Stream Mobile Native          
+    87749df4-7ccf-48f8-aa87-704bad0e0e16 Microsoft Teams - Device Admin Agent    
+    cf36b471-5b44-428c-9ce7-313bf84528de Microsoft Bing Search                   
+    0ec893e0-5785-4de6-99da-4ed124e5296c Office UWP PWA                          
+    22098786-6e16-43cc-a27d-191a01a1e3b5 Microsoft To-Do client                  
+    4e291c71-d680-4d0e-9640-0a3358e31177 PowerApps                               
+    57336123-6e14-4acc-8dcf-287b6088aa28 Microsoft Whiteboard Client             
+    57fcbcfa-7cee-4eb1-8b25-12d2030b4ee0 Microsoft Flow                          
+    66375f6b-983f-4c2c-9701-d680650f588f Microsoft Planner                       
+    9ba1a5c7-f17a-4de9-a1f1-6178c8d51223 Microsoft Intune Company Portal         
+    a40d7d7d-59aa-447e-a655-679a4107e548 Accounts Control UI                     
+    a569458c-7f2b-45cb-bab9-b7dee514d112 Yammer iPhone                           
+    b26aadf8-566f-4478-926f-589f601d9c74 OneDrive                                
+    c0d2a505-13b8-4ae0-aa9e-cddd5eab0b12 Microsoft Power BI                      
+    d326c1ce-6cc6-4de2-bebc-4591e5e13ef0 SharePoint                              
+    e9c51622-460d-4d3d-952d-966a5b1da34c Microsoft Edge                          
+    eb539595-3fe1-474e-9c1d-feb3625d1be5 Microsoft Tunnel                        
+    ecd6b820-32c2-49b6-98a6-444530e5a77a Microsoft Edge                          
+    f05ff7c9-f75a-4acd-a3b5-f4b6a870245d SharePoint Android                      
+    f44b1140-bc5e-48c6-8dc0-5cf5a53c0e34 Microsoft Edge
+#>
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [switch]$Online
+        )
+    Process
+    {
+        if($Online)
+        {
+            try
+            {
+                $FOCIClients = Invoke-RestMethod -UseBasicParsing -Uri "https://raw.githubusercontent.com/secureworks/family-of-client-ids-research/main/known-foci-clients.csv"
+                ConvertFrom-Csv -Delimiter "," -InputObject $FOCIClients
+            }
+            catch
+            {
+                Throw "Unable to get FOCI clients from https://raw.githubusercontent.com/secureworks/family-of-client-ids-research/main/known-foci-clients.csv"
+            }
+        }
+        else
+        {
+            foreach($key in $Script:FOCIs.Keys)
+            {
+                [PSCustomObject]@{
+                    "client_id" = $key
+                    "application_name" = $Script:FOCIs[$key]
+                    }
+            }
+        }
+    }
+}
+
+# Parses config from login.microsoftonline.com sites
+# May 28th 2023
+function Parse-LoginMicrosoftOnlineComConfig
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]$Body
+    )
+    Process
+    {
+        # Try to get the $Config=
+        $c = Get-StringBetween -String $body -Start '$Config=' -End "//]]>"
+        
+        try
+        {
+            # Trim null, carriage return, newline, and ;
+            $c = $c.TrimEnd(@(0x00,0x0a,0x0d,0x3B))
+            $j = $c | ConvertFrom-Json -ErrorAction SilentlyContinue
+
+            # Some verbose
+            if($j.serverDetails)
+            {
+                $s = $j.serverDetails
+                Write-Verbose "SERVER: $($s.dc) $($s.ri) $($s.ver.v -join ".")"
+            }
+            if($j.correlationId)
+            {
+                Write-Verbose "Correlation ID: $($j.correlationId)"
+            }
+            if($j.sessionId)
+            {
+                Write-Verbose "Session ID: $($j.sessionId)"
+            }
+        }
+        catch
+        {}
+
+        return $j
+    }
+}
+
+# Gets authorization code in interactive mode - Supports MFA
+# May 28th 2023
+# OAuth 2.0 Auth code grant flow
+function Get-AuthorizationCode
+{
+    [cmdletbinding()]
+    Param(
+        # Use these default values to get the code as some tenants may have blocked others with Conditional Access.
+        # You can then use the refresh_token to get access_token for correct resource and clientid.
+        [Parameter(Mandatory=$False)]
+        [String]$Resource = "https://graph.windows.net",
+        [Parameter(Mandatory=$True)]
+        [String]$ClientId = "1b730954-1685-4b74-9bfd-dac224a7b894",
+
+        [Parameter(Mandatory=$False)]
+        [String]$Tenant,
+        [Parameter(Mandatory=$False)]
+        [string]$AMR,
+        [Parameter(Mandatory=$False)]
+        [string]$RefreshTokenCredential,
+        [Parameter(Mandatory=$False)]
+        [string]$UserAgent="AADInternals",
+        [Parameter(Mandatory=$False)]
+        [System.Management.Automation.PSCredential]$Credentials,
+        [Parameter(Mandatory=$False)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate,
+        [Parameter(Mandatory=$False)]
+        [string]$PfxFileName,
+        [Parameter(Mandatory=$False)]
+        [string]$PfxPassword,
+        [Parameter(Mandatory=$False)]
+        [string]$OTPSecretKey,
+        [Parameter(Mandatory=$False)]
+        [string]$TAP
+    )
+    Begin
+    {
+        # Function for processing password & TAP
+        function Process-Login
+        {
+            [cmdletbinding()]
+            Param(
+                [Parameter(Mandatory=$False)]
+                [System.Management.Automation.PSCredential]$Credentials,
+                [Parameter(Mandatory=$False)]
+                [boolean]$isTAP = $false,
+                [Parameter(Mandatory=$True)]
+                [PSObject]$Config,
+                [Parameter(Mandatory=$False)]
+                [string]$TAP
+            )
+            Process
+            {
+                # Loop until we get a correct password/TAP or get CTRL+C
+                while(-not $passwordOk)
+                {
+                    # Use the provided TAP
+                    if($isTAP -and -not [string]::IsNullOrEmpty($TAP))
+                    {
+                        $password = $TAP
+                    }
+                    # Use the provided credentials
+                    elseif($Credentials)
+                    {
+                        $password = $Credentials.GetNetworkCredential().Password
+                    }
+                    # Prompt for password/TAP
+                    else
+                    {
+                        $pwdPrompt = "Password"
+                        if($isTAP)
+                        {
+                            $pwdPrompt = "Temporary Access Pass"
+                        }
+                        
+                        $password = Read-HostPassword -Prompt $pwdPrompt
+                    }
+
+                    # Send the password/TAP
+                    if($config.urlPost.startsWith("/"))
+                    {
+                        $url = "https://login.microsoftonline.com$($config.urlPost)"
+                    }
+                    else
+                    {
+                        $url = $config.urlPost
+                    }
+
+                    # Create the body
+                    $body = @{
+                        "login"      = $userName
+                        "passwd"     = $password
+                        "ctx"        = $config.sCtx
+                        "flowToken"  = $config.sFT
+                        "canary"     = $config.canary
+                        "client_id"  = $ClientId
+                    }
+                    if($isTAP)
+                    {
+                        $body.Remove("passwd")
+                        $body["accesspass"] = $password
+                    }
+                    
+                    $response = Invoke-WebRequest2 -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -Headers $Headers -Body $body -ErrorAction SilentlyContinue
+                                        
+                    $config = Parse-LoginMicrosoftOnlineComConfig -Body $response.Content
+
+                    # Expired password
+                    if($config.pgid -eq "ConvergedChangePassword")
+                    {
+                        Write-Verbose "ConvergedChangePassword"
+                        $newPasswordOk = $false
+
+                        while($newPasswordOk -eq $false)
+                        {
+                            # Prompt for the password
+                            Write-Host "You need to update your password because this is the first time you are signing in, or because your password has expired."
+                            $newPassword = Read-HostPassword -Prompt "New password"
+                            if([string]::IsNullOrEmpty($newPassword))
+                            {
+                                return $null
+                            }
+                            
+                            # SSPR BEGIN
+                            $body = @{
+                                "Ctx"          = $config.sCtx
+                                "FlowToken"    = $config.sFT
+                                "OldPassword"  = $password
+                                "NewPassword"  = $newPassword
+                            }
+                            $url = "https://login.microsoftonline.com$($config.urlAsyncSsprBegin)"
+                            $ssprResponse = Invoke-RestMethod -UseBasicParsing -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -ErrorAction SilentlyContinue -Headers $Headers -Body ($body | ConvertTo-Json) -ContentType "application/json; charset=UTF-8"
+                            # SSPR POLL
+                            while($ssprResponse.IsJobPending)
+                            {
+                                $body = @{
+                                    "Ctx"               = $ssprResponse.Ctx
+                                    "FlowToken"         = $ssprResponse.FlowToken
+                                    "CoupledDataCenter" = $ssprResponse.CoupledDataCenter
+                                    "CoupledScaleUnit"  = $ssprResponse.CoupledScaleUnit
+                                }
+                                $url = "https://login.microsoftonline.com$($config.urlAsyncSsprPoll)"
+                                $ssprResponse = Invoke-RestMethod -UseBasicParsing -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -ErrorAction SilentlyContinue -Headers $Headers -Body ($body | ConvertTo-Json) -ContentType "application/json; charset=UTF-8"
+                            }
+
+                            # Complexity requirements..
+                            if($ssprResponse.ErrorMessage)
+                            {
+                                Write-Host $ssprResponse.ErrorMessage -ForegroundColor Red
+                            }
+                            else
+                            {
+                                $newPasswordOk = $true
+                            }
+                        }
+                        # SSPR END
+                        $body = @{
+                            "ctx"              = $ssprResponse.Ctx
+                            "flowToken"        = $ssprResponse.FlowToken
+                            "currentpasswd"    = $password
+                            "confirmnewpasswd" = $newPassword
+                            "canary"           = $config.canary
+                        }
+                        $url = "https://login.microsoftonline.com$($config.urlPost)"
+
+                        $response = Invoke-WebRequest2 -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -Headers $Headers -Body $body -ContentType "application/x-www-form-urlencoded" -ErrorAction SilentlyContinue
+                        $config = Parse-LoginMicrosoftOnlineComConfig -Body $response.Content
+                    }
+
+                    # MFA action required
+                    if($config.pgid -eq "ConvergedProofUpRedirect")
+                    {
+                        Write-Verbose "ConvergedProofUpRedirect"
+                        $MFADays = $config.iRemainingDaysToSkipMfaRegistration
+                        if($MFADays)
+                        {
+                            Write-Warning "MFA must be set up in $($MFA) days"
+                            # Create the body
+                            $body = @{
+                                "LoginOptions" = 1
+                                "ctx"          = $config.sCtx
+                                "flowToken"    = $config.sFT
+                                "canary"       = $config.canary
+                            }
+
+                            $url = $config.urlSkipMfaRegistration
+                            $response = Invoke-WebRequest2 -Uri $url -WebSession $LoginSession -MaximumRedirection 0 -Headers $Headers -ErrorAction SilentlyContinue
+                        }
+                        else
+                        {
+                            throw "MFA method must be registered."
+                        }
+                    }
+                    # Keep me signed in prompt
+                    elseif($config.pgid -eq "KmsiInterrupt")
+                    {
+                        Write-Verbose "KMSI"
+                        # Create the body
+                        $body = @{
+                            "LoginOptions" = 1
+                            "ctx"          = $config.sCtx
+                            "flowToken"    = $config.sFT
+                            "canary"       = $config.canary
+                        }
+
+                        $url = "https://login.microsoftonline.com$($config.urlPost)"
+                        $response = Invoke-WebRequest2 -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -Headers $Headers -Body $body -ContentType "application/x-www-form-urlencoded" -ErrorAction SilentlyContinue
+                    }
+                    # Some weird redirect issue with non-edge Chrome browsers 
+                    elseif($config.oPostParams)
+                    {
+                        Throw "Chrome redirect issue. Try using Edge or non-chrome User-Agent."
+                    }
+                    
+                    # Check the response code
+                    switch($response.StatusCode)
+                    {
+                        # We got an error or MFA prompt
+                        200
+                        {
+                            $config = Parse-LoginMicrosoftOnlineComConfig -Body $response.Content
+
+                            # Something severe
+                            if($config.strServiceExceptionMessage)
+                            {
+                                throw $config.strServiceExceptionMessage
+                            }
+                            # Wrong password etc
+                            elseif($config.sErrorCode -ne $null)
+                            {
+                                # When using TAP for MFA, the correct error code is not returned
+                                if($config.sErrorCode -eq "InvalidAccessPass")
+                                {
+                                    $AADError = "130503: Your Temporary Access Pass is incorrect. If you don't know your pass, contact your administrator."
+                                }
+                                # Get error text from Azure AD
+                                else
+                                {
+                                    $AADError = Get-Error -ErrorCode $config.sErrorCode
+                                }
+                                # We don't want to loop with provided password/TAP so throw the error
+                                if(($Credentials) -or ($isTAP -and (-not [string]::IsNullOrEmpty($TAP))))
+                                {
+                                    Throw $AADError
+                                }
+
+                                Write-Host $AADError -ForegroundColor Red
+                            }
+                            # MFA
+                            elseif($config.arrUserProofs -ne $null)
+                            {
+                                $passwordOk = $true
+                                $MFA = $true
+                            }
+                        }
+                        # Ok, we got the code!
+                        302
+                        {
+                        $passwordOk = $true
+                        }
+
+                    }
+        
+                }
+
+                return [pscustomobject]@{
+                    "MFA"      = $MFA
+                    "Config"   = $Config
+                    "Response" = $response
+                }
+            }
+        }
+    }
+    Process
+    {
+        # Remove variables
+        Remove-Variable -Name "LoginSession" -ErrorAction SilentlyContinue
+        Remove-Variable -Name "Config" -ErrorAction SilentlyContinue
+        Remove-Variable -Name "Response" -ErrorAction SilentlyContinue
+
+        # Load certificate if provided
+        if(!$Certificate -and -not [string]::IsNullOrEmpty($PfxFileName))
+        {
+            $Certificate = Load-Certificate -FileName $PfxFileName -Password $PfxPassword -Exportable
+        }
+
+        # Get redirect url
+        $auth_redirect= Get-AuthRedirectUrl -ClientId $ClientId -Resource $Resource
+                        
+        # Create the url
+        $loginEndPoint = "https://login.microsoftonline.com"
+        $request_id=(New-Guid).ToString()
+        $url="$loginEndPoint/$Tenant/oauth2/authorize?resource=$Resource&client_id=$ClientId&response_type=code&redirect_uri=$auth_redirect&client-request-id=$request_id&prompt=login&scope=openid profile&response_mode=query&sso_reload=True"
+
+        # Authentication Method References (AMR), "mfa" or "ngcmfa" will enforce MFA
+        # Ref: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-oapx/0fc398ca-88d0-4118-ae60-c3033e396e60
+        if($AMR)
+        {
+            $url+="&amr_values=$AMR"
+        }
+
+        # Headers
+        $headers = @{
+            "User-Agent" = $UserAgent
+        }
+        # Set RefreshTokenCredential for device authentication
+        if($RefreshTokenCredential)
+        {
+            $headers["x-ms-RefreshTokenCredential"] = $RefreshTokenCredential
+            $parsedToken = Read-AccessToken -AccessToken $RefreshTokenCredential
+            if($parsedToken.request_nonce)
+            {
+                $url += "&sso_nonce=$($parsedToken.request_nonce)"
+            }
+        }
+
+        # Make the first request to authorization endpoint. Allow one redirect for sso_nonce
+        $response = Invoke-WebRequest -UseBasicParsing -Uri $url -SessionVariable "LoginSession" -Method get -MaximumRedirection 1 -ErrorAction SilentlyContinue -Headers $Headers
+
+        $config   = Parse-LoginMicrosoftOnlineComConfig -Body $response.Content
+        
+        # Prompt for user name if not provided
+        if($Credentials)
+        {
+            $userName = $Credentials.UserName
+        }
+        else
+        {
+            Write-Host "Logging in to $($config.sCompanyDisplayName)"
+            $userName = Read-Host -Prompt "Enter email, phone, or Skype"
+        }
+
+        # Get credential type
+        $credType = Get-CredentialType -UserName $userName -FlowToken $config.sFT -OriginalRequest $config.sCtx
+
+        # Check the credential type (managed vs federated)
+        if($credType.Credentials.FederationRedirectUrl)
+        {
+            throw "Federated identities are not supported."
+        }
+
+        # Check whether we are throttling
+        if($credType.ThrottleStatus -eq 1)
+        {
+            Throw "Requests throttled. Wait a minute and try again."
+        }
+
+        # Does the user exist?
+        if($credType.IfExistsResult -ne 0 -and $credType.IfExistsResult -ne 6 -and $credType.IfExistsResult -ne 5)
+        {
+            Throw "We couldn't find an account with that username." 
+        }
+
+        # Ask which account to use (MSA or AAD)
+        # MSA not supported at the moment, so skip this
+        <#
+        $accountType = 0 # AAD
+        if($credType.IfExistsResult -eq 6)
+        {
+            $options = @(
+                    New-Object System.Management.Automation.Host.ChoiceDescription "&1 Work or school account"
+                    New-Object System.Management.Automation.Host.ChoiceDescription "&2 Personal account"
+                )
+            $accountType = $host.UI.PromptForChoice("Choose account","It looks like this email is used with more than one account from Microsoft. Which one do you want to use?",$options,0)
+        }
+        #>
+
+        # Choose authentication method
+        $authOptions = @()
+        $nAuthOption = 0
+        $pwdOption = -2
+        $cbaOption = -2
+        $tapOption = -2
+
+        # Password?
+        if($credType.Credentials.HasPassword -eq $True)
+        {
+            Write-Verbose "Password enabled."
+            $pwdOption = $nAuthOption
+            $nAuthOption++
+            $authOptions += New-Object System.Management.Automation.Host.ChoiceDescription "&$nAuthOption Password" 
+            
+        }
+
+        # Temporary Access Pass (TAP)?
+        if($credType.Credentials.HasAccessPass -eq $True)
+        {
+            Write-Verbose "Temporary Access Pass enabled."
+            $tapOption = $nAuthOption
+            $nAuthOption++
+            $authOptions += New-Object System.Management.Automation.Host.ChoiceDescription "&$nAuthOption Temporary Access Pass"
+        }
+
+        # Certificate Based Authentication (CBA)?
+        if($credType.Credentials.HasCertAuth -eq $True)
+        {
+            Write-Verbose "CBA enabled."
+            if($Certificate)
+            {
+                $cbaOption = $nAuthOption
+                $nAuthOption++
+                $authOptions += New-Object System.Management.Automation.Host.ChoiceDescription "&$nAuthOption Certificate"
+            }
+            else
+            {
+                Write-Verbose "No certificate provided, skipping CBA."
+            }
+        }
+
+        # No supported authentication options found :(
+        if($authOptions.Count -eq 0)
+        {
+            Throw "No supported authentication options found!"
+        }
+        # Just one option so use that
+        elseif($authOptions.Count -eq 1)
+        {
+            $authOption = 0
+        }
+        # If we have TAP and it's available, use that
+        elseif($tapOption -ge 0 -and -not [string]::IsNullOrEmpty($TAP))
+        {
+            $authOption = $tapOption
+        }
+        # Prompt for options
+        else
+        {
+            $authOption = $host.UI.PromptForChoice("Authentication options","Choose authentication method",[System.Management.Automation.Host.ChoiceDescription[]]$authOptions,0)
+        }
+        
+        switch($authOption)
+        {
+            $pwdOption
+            {
+                $cPWD = $true
+            }
+            $cbaOption
+            {
+                $cCBA = $true
+            }
+            $tapOption
+            {
+                $cTAP = $true
+            }
+            default
+            {
+                return $null
+            }
+        }
+
+        # PWD & TAP
+        if($cPWD -or $cTAP)
+        {
+            $loginResponse = Process-Login -Credentials $Credentials -Config $config -IsTAP ($cTAP -eq $true) -TAP $TAP
+            if($loginResponse -eq $null)
+            {
+                return $null
+            }
+            $config   = $loginResponse.Config
+            $MFA      = $loginResponse.MFA
+            $response = $loginResponse.Response
+        }
+
+        if($MFA)
+        {
+            # Get MFA types from the config
+            $MFATypes = [ordered]@{}
+            $MFAOptions = @()
+            $m = 1
+            foreach($mfaType in $config.arrUserProofs)
+            {
+                # Certificate not currently supported
+                if($mfaType.authMethodId -ne "Certificate")
+                {
+                    $MFATypes[$mfaType.authMethodId] = $mfaType.display
+                    $MFAOptions += New-Object System.Management.Automation.Host.ChoiceDescription "&$m $($mfaType.authMethodId) ($($mfaType.display))"
+                    $m++
+
+                    # If OTPSecret is provided and whe have PhoneAppOTP option, use that
+                    if($mfaType.authMethodId -eq "PhoneAppOTP" -and -not [string]::IsNullOrEmpty($OTPSecretKey))
+                    {
+                        $mfaMethod = $mfaType.authMethodId
+                    }
+                }
+            }
+
+            if($MFAOptions.Count -eq 0)
+            {
+                Throw "No supported MFA methods found!"
+            }
+                        
+            # Ask user to choose MFA method if not automatically chosen
+            if(-not $mfaMethod)
+            {
+                # If there's just one method, use that
+                if($MFATypes.Count -eq 1)
+                {
+                    $mfaMethod = [string]$MFATypes.Keys[0]
+                }
+                else
+                {
+                    $mfaSelection = $host.UI.PromptForChoice("MFA options","Choose MFA method",$MFAOptions,0)
+                    if($mfaSelection -eq -1)
+                    {
+                        return $null
+                    }
+                    $p = 0
+                    foreach($key in $MFATypes.Keys)
+                    {
+                        if($p -eq $mfaSelection)
+                        {
+                            $mfaMethod = $key
+                            break
+                        }
+                        $p++
+                    }
+                }
+            }   
+
+            # Start the MFA loop
+            $url = $config.urlBeginAuth
+            $body = @{
+                "AuthMethodId" = $mfaMethod
+                "ctx"          = $config.sCtx
+                "flowToken"    = $config.sFT
+                "Method"       = "BeginAuth"
+            }
+            # TAP has unique MFA flow
+            if($mfaMethod -eq "AccessPass")
+            {
+                $body["AuthMethodId"] = "PhoneAppOTP"
+            }
+
+            $headers = @{
+                "User-Agent"   = $userAgent
+                "canary"       = $config.apiCanary
+                "Content-Type" = "application/json; charset=utf-8"
+            }
+
+            # SAS/BeginAuth if not TAP
+            if($mfaMethod -eq "AccessPass")
+            {
+                $beginAuth = $true
+            }
+            else
+            {
+                $response = Invoke-RestMethod -UseBasicParsing -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -ErrorAction SilentlyContinue -Headers $Headers -Body ($body|ConvertTo-Json)
+                $beginAuth = $response.Success -eq $true
+            }
+            
+            if($beginAuth)
+            {
+                # Prompt for MFA method
+                switch($mfaMethod)
+                {
+                    "PhoneAppNotification"
+                    {
+                        Write-Host "Open your Authenticator app, and enter the number shown to sign in:​​"
+                        Write-Host $response.Entropy
+                        break
+                    }
+                    "PhoneAppOTP"
+                    {
+                        # Use provided OTPSecret
+                        if($OTPSecretKey)
+                        {
+                            Write-Host "Using the provided OTP Secret for MFA."
+                            # Calculate OTP using the secret key
+                            $OTP = New-AADIntOTP -SecretKey $OTPSecretKey
+                            # Strip the spaces
+                            $additionalAuthData = $OTP.OTP.Replace(" ","")
+                            break
+                        }
+                        else
+                        {
+                            $additionalAuthData = Read-Host "Please type in the code displayed on your authenticator app from your device"
+                            break
+                        }
+                    }
+                    "OneWaySMS"
+                    {
+                        $additionalAuthData = Read-Host "We texted your phone $($MFATypes[$mfaMethod]). Please enter the code to sign in"
+                        break
+                    }
+                    "TwoWayVoiceMobile"
+                    {
+                        Write-Host "We're calling your phone $($MFATypes[$mfaMethod]). Please answer it to continue."
+                        break
+                    }
+                    "TwoWayVoiceAlternateMobile"
+                    {
+                        Write-Host "We're calling your phone $($MFATypes[$mfaMethod]). Please answer it to continue."
+                        break
+                    }
+                    "AccessPass"
+                    {
+                        # TAP has a unique flow
+                        $loginResponse = Process-Login -Config $config -IsTAP $true -TAP $TAP
+                        
+                        if($loginResponse -eq $null)
+                        {
+                            return $null
+                        }
+                        $config   = $loginResponse.Config
+                        $MFA      = $loginResponse.MFA
+                        $response = $loginResponse.Response
+                        
+                        break
+                    }
+                    default
+                    {
+                        Throw "MFA method $mfaMethod not supported."
+                        break
+                    }
+                }
+
+                # SAS/EndAuth
+                if($mfaMethod -ne "AccessPass")
+                {
+                    for($p = 1;$p -le $config.iMaxPollAttempts ; $p++)
+                    {
+                        # If OTP or SMS send a single request
+                        if(@("PhoneAppOTP","OneWaySMS") -contains $mfaMethod)
+                        {
+                            $url = $config.urlEndAuth
+
+                            $headers = @{
+                                "User-Agent"   = $userAgent
+                                "canary"       = $config.apiCanary
+                                "Content-Type" = "application/json; charset=utf-8"
+                            }
+
+                            $body = @{
+                                "AdditionalAuthData" = $additionalAuthData
+                                "AuthMethodId"       = $mfaMethod
+                                "SessionId"          = $response.SessionId
+                                "FlowToken"          = $response.FlowToken
+                                "Ctx"                = $response.Ctx
+                                "Method"             = "EndAuth"
+                            }
+
+                            $response = Invoke-RestMethod -UseBasicParsing -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -ErrorAction SilentlyContinue -Headers $Headers -Body ($body | ConvertTo-Json)
+                        }
+                        # Poll until we get response or timeout
+                        else
+                        {
+                            $url = "$($config.urlEndAuth)?authMethodId=$mfaMethod&pollCount=$p"
+
+                            $headers = @{
+                                "User-Agent"     = $userAgent
+                                "x-ms-sessionId" = $response.SessionId
+                                "x-ms-flowToken" = $response.FlowToken
+                                "x-ms-ctx"       = $response.Ctx
+                            }
+
+                            $response = Invoke-RestMethod -UseBasicParsing -Uri $url -WebSession $LoginSession -Method Get -MaximumRedirection 0 -ErrorAction SilentlyContinue -Headers $Headers
+                        }
+                        if($response.Success -eq $true)
+                        {
+                            # SAS/ProcessAuth
+                            $headers = @{
+                                "User-Agent"   = $userAgent
+                                "Content-Type" = "application/x-www-form-urlencoded"
+                            }
+
+                            $url = $config.urlPost
+
+                            $body = @{
+                                "request"       = $response.Ctx
+                                "mfaAuthMethod" = $mfaMethod
+                                "login"         = $userName
+                                "flowToken"     = $response.FlowToken
+                                "canary"        = $config.canary
+                            }
+
+                            $response = Invoke-WebRequest2 -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -Headers $Headers -Body $body -ErrorAction SilentlyContinue
+
+                            break
+                        }
+                        elseif($response.Retry -eq $false)
+                        {
+                            Throw "$($response.Message) $($response.ResultValue)"
+                        }
+                        Start-Sleep -Milliseconds $config.iPollingInterval
+                    }
+                }
+            }
+        }
+
+        # Some weird redirect again
+        if($response.Content.Contains("https://device.login.microsoftonline.com"))
+        {
+            Write-Warning "Got an error, try using another User-Agent, current is: $(Get-Setting -Setting "User-Agent")"
+            throw "Got unexpected redirect to https://device.login.microsoftonline.com"
+        }
+
+        # Check for errors
+        $config = Parse-LoginMicrosoftOnlineComConfig -Body $response.Content
+        if($config.strServiceExceptionMessage)
+        {
+            Write-Warning "Got an error, try using another User-Agent, current is: $(Get-Setting -Setting "User-Agent")"
+            throw $config.strServiceExceptionMessage
+        }
+
+        $authorizationCode = Parse-CodeFromResponse -Response $response
+
+        return $authorizationCode
+    }
+}
+

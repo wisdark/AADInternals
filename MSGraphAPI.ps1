@@ -1172,3 +1172,118 @@ function Get-TenantDomain
         return $results.defaultDomainName
     }
 }
+
+# Adds a new TAP for the given user
+# Jun 26th 2023
+function New-UserTAP
+{
+    <#
+    .SYNOPSIS
+    Creates a new Temporary Access Pass (TAP) for the given user.
+
+    .DESCRIPTION
+    Creates a new Temporary Access Pass (TAP) for the given user.
+
+    .PARAMETER
+
+    .Example
+    Get-AADIntAccessTokenForMSGraph -SaveToCache
+    PS C:\>Get-AADIntTenantDomain -TenantId 72f988bf-86f1-41af-91ab-2d7cd011db47
+    microsoft.onmicrosoft.com
+#>
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]$AccessToken,
+        [Parameter(Mandatory=$False)]
+        [switch]$UsableOnce,
+        [Parameter(Mandatory=$False)]
+        [ValidateRange(10, 43200)]
+        [int]$Lifetime = 60,
+        [Parameter(Mandatory=$False)]
+        [DateTime]$StartTime = (Get-Date),
+        [Parameter(Mandatory=$True)]
+        [String]$User
+    )
+    Process
+    {
+        # Get from cache if not provided
+        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://graph.microsoft.com" -ClientId "1b730954-1685-4b74-9bfd-dac224a7b894"
+
+        # Create the body
+        $body = @{
+            "startDateTime"     = ($StartTime).ToUniversalTime().toString("yyyy-MM-ddTHH:mm:ssZ").Replace(".",":")
+            "lifetimeInMinutes" = $Lifetime
+            "isUsableOnce"      = $UsableOnce -eq $true
+        }
+
+        $results = Call-MSGraphAPI -AccessToken $AccessToken -API "users/$user/authentication/temporaryAccessPassMethods" -Method POST -Body ($body | ConvertTo-Json)
+        
+        return $results.temporaryAccessPass
+    }
+}
+
+# Return B2C trust framework keysets
+# Sep 13th 2022
+function Get-B2CEncryptionKeys
+{
+<#
+    .SYNOPSIS
+    Gets B2C trust framework encryption keys. Can be used to create authorization codes and refresh tokens.
+
+    .DESCRIPTION
+    Gets B2C trust framework encryption keys. Can be used to create authorization codes and refresh tokens.
+    Requires one of the following roles: B2C IEF Keyset Administrator, Global Reader, Global Administrator.
+
+    .PARAMETER AccessToken
+    AccessToken
+
+    .Example
+    Get-AADIntAccessTokenForMSGraph -SaveToCache
+    PS C:\>Get-AADIntB2CEncryptionKeys
+    
+    Container                          Id                                          Key
+    ---------                          --                                          ---
+    B2C_1A_test                        XZ0q5X-Zu_oY2mX-El89a1YEsh4FRj0e5xpGMjJ94uE System.Security.Cryptography.RSACryptoServiceProvider
+    B2C_1A_TokenEncryptionKeyContainer My_custom_key_id                            System.Security.Cryptography.RSACryptoServiceProvider
+#>
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]$AccessToken
+    )
+    Process
+    {
+        # Get from cache if not provided
+        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -Resource "https://graph.microsoft.com" -ClientId "1b730954-1685-4b74-9bfd-dac224a7b894"
+
+        # Get all keysets
+        $results=Call-MSGraphAPI -AccessToken $AccessToken -API "trustFramework/keySets" 
+        
+        # Loop through the results
+        foreach($container in $results)
+        {
+            # Loop through the keys (can be more than one per container)
+            foreach($key in $container.keys)
+            {
+                # Include only RSA encryption keys
+                if($key.kty -eq "RSA" -and $key.use -eq "enc")
+                {
+                    # Create the parameters and RSA key
+                    $RSAParameters = [System.Security.Cryptography.RSAParameters]::new()
+                    $RSAParameters.Modulus = Convert-B64ToByteArray -B64 $key.n
+                    $RSAParameters.Exponent = Convert-B64ToByteArray -B64 $key.e
+                    $RSAKey = [System.Security.Cryptography.RSA]::Create()
+                    $RSAKey.ImportParameters($RSAParameters)
+
+                    # Return
+                    [pscustomobject][ordered]@{
+                        "Container" = $container.id
+                        "Id" = $key.kid
+                        "Key" = $RSAKey
+                    }
+                }
+            }
+        }
+    }
+}

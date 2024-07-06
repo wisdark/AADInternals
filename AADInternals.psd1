@@ -4,7 +4,7 @@
 	RootModule = 'AADInternals.psm1'
 
 	# Version number of this module.
-	ModuleVersion = '0.8.0'
+	ModuleVersion = '0.9.3'
 
 	# Supported PSEditions
 	# CompatiblePSEditions = @()
@@ -19,7 +19,7 @@
 	CompanyName = 'Gerenios Ltd'
 
 	# Copyright statement for this module
-	Copyright = '(c) 2018 - 2022 Nestori Syynimaa (@DrAzureAD). Distributed under MIT license.'
+	Copyright = '(c) 2018 - 2024 Nestori Syynimaa (@DrAzureAD). Distributed under MIT license.'
 
 	# Description of the functionality provided by this module
 	Description = 'The AADInternals PowerShell Module utilises several internal features of Azure Active Directory, Office 365, and related admin tools.
@@ -66,6 +66,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
 	# Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
 	NestedModules = @(
         ".\AADSyncSettings.ps1"
+        ".\AccessPackages.ps1"
         ".\AccessToken.ps1"
         ".\AccessToken_utils.ps1"
         ".\ActiveSync.ps1"
@@ -81,6 +82,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
         ".\AzureCoreManagement.ps1"
         ".\AzureManagementAPI.ps1"
         ".\AzureManagementAPI_utils.ps1"
+        ".\B2C.ps1"
         ".\CBA.ps1"
         ".\ClientTools.ps1"
         ".\CloudShell.ps1"
@@ -88,6 +90,8 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
         ".\CommonUtils.ps1"
         ".\ComplianceAPI.ps1"
         ".\ComplianceAPI_utils.ps1"
+        ".\DCaaS.ps1"
+        ".\DCaaS_utils.ps1"
         ".\Device.ps1"
         ".\Device_utils.ps1"
         ".\DRS_Utils.ps1"
@@ -131,6 +135,8 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
         ".\PTASpy.ps1"
         ".\SARA.ps1"
         ".\SARA_utils.ps1"
+        ".\SPMT.ps1"
+        ".\SPMT_utils.ps1"
         ".\SPO.ps1"
         ".\SPO_utils.ps1"
         ".\SQLite.ps1"
@@ -159,7 +165,13 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Update-ADFSFederationSettings"
     "Get-ADFSConfiguration"
     
+    # AccessPackages.ps1
+    "Get-AccessPackageAdmins"
+    "Get-AccessPackageCatalogs"
+    "Get-AccessPackages"
+
     # AccessToken.ps1
+    "Get-AccessTokenFromCache"
     "Get-AccessToken"
     "Get-AccessTokenWithRefreshToken"
     "Get-AccessTokenForAADGraph"
@@ -180,9 +192,11 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-AccessTokenForMSPartner"
     "Get-AccessTokenForAdmin"
     "Get-AccessTokenForOneNote"
+    "Get-AccessTokenForWHfB"
     "Unprotect-EstsAuthPersistentCookie"
     "Get-AccessTokenUsingIMDS"
     "Get-AccessTokenForSPOMigrationTool"
+    "Get-AccessTokenForAccessPackages"
     
     # AccessToken_utils.ps1
     "Get-LoginInformation"
@@ -198,6 +212,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Export-TeamsTokens"
     "Export-AzureCliTokens"
     "Export-TokenBrokerTokens"
+    "Get-FOCIClientIDs"
 
     # GraphAPI.ps1
     "Get-TenantDetails"
@@ -207,6 +222,10 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-ConditionalAccessPolicies"
     "Get-AzureADPolicies"
     "Set-AzureADPolicyDetails"
+    "Get-AzureADFeature"
+    "Get-AzureADFeatures"
+    "Set-AzureADFeature"
+    "Add-SyncFabricServicePrincipal"
 
     # ProvisioningAPI.ps1
     "Set-DomainAuthentication"
@@ -231,7 +250,6 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "New-SAML2Token"
     "Get-ImmutableID"
     "ConvertTo-Backdoor"
-    "New-Backdoor"
     "Open-Office365Portal"
 
     # AzureADConnectAPI.ps1
@@ -252,6 +270,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-WindowsCredentialsSyncConfig"
     "Get-SyncDeviceConfiguration"
     "Join-OnPremDeviceToAzureAD"
+    "Set-AzureADGroupMember"
 
     # AzureManagementAPI_utils.ps1
     "Get-AccessTokenForAADIAMAPI"
@@ -298,6 +317,8 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     # SARA.ps1
     "Get-SARAUserInfo"
     "Get-SARATenantInfo"
+    "Test-SARAPort"
+    "Resolve-SARAHost"
 
     # SPO_utils.ps1
     "Get-SPOAuthenticationHeader"
@@ -307,6 +328,11 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-SPOSiteGroups"
     "Get-SPOUserProperties"
     "Set-SPOSiteMembers"
+    "Export-SPOSiteFile"
+
+    # SPMT.ps1
+    "Add-SPOSiteFiles"
+    "Update-SPOSiteFile"
 
     # Kerberos.ps1
     "New-KerberosTicket"
@@ -379,6 +405,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Remove-RolloutPolicy"
     "Set-RolloutPolicy"
     "Get-TenantDomain"
+    "Get-B2CEncryptionKeys"
 
     # KillChain.ps1
     "Invoke-UserEnumerationAsOutsider"
@@ -404,6 +431,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-DeviceTransportKey"
     "Set-DeviceTransportKey"
     "New-BulkPRTToken"
+    "Set-DeviceWHfBKey"
 
     # MDM.ps1
     "Join-DeviceToIntune"
@@ -418,6 +446,11 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Get-Error"
     "New-Certificate"
     "Get-AzureWireServerAddress"
+    "Read-Configuration"
+    "Save-Configuration"
+    "Get-Configuration"
+    "Set-Setting"
+    "Set-UserAgent"
 
     # Teams.ps1
     "Get-SkypeToken"
@@ -431,6 +464,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Find-TeamsExternalUser"
     "Get-TeamsAvailability"
     "Get-Translation"
+    "Get-MyTeams"
 
     # Teams_utils.ps1
     "Get-TeamsUserSettings"
@@ -477,6 +511,7 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     "Remove-MSPartnerDelegatedAdminRoles"
     "Get-MSPartners"  
     "Get-TenantOrganisationInformation"
+    "Get-AccessTokenUsingAdminAPI"
     
     # Device.ps1
     "Export-LocalDeviceCertificate"
@@ -493,6 +528,17 @@ DISCLAIMER: Functionality provided through this module are not supported by Micr
     # CBA.ps1
     "Get-AdminPortalAccessTokenUsingCBA"
     "Get-PortalAccessTokenUsingCBA"
+
+    # DCaaS.ps1
+    "Get-UserNTHash"
+    "Install-ForceNTHash"
+    "Remove-ForceNTHash"
+    "Initialize-FullPasswordSync"
+
+    # B2C.ps1
+    "New-B2CRefreshToken"
+    "New-B2CAuthorizationCode"
+
 )
 
 	# Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.

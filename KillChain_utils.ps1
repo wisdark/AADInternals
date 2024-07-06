@@ -10,7 +10,7 @@ function HasCloudMX
     )
     Process
     {
-        $results=Resolve-DnsName -Name $Domain -Type MX -DnsOnly -NoHostsFile -NoIdn -ErrorAction SilentlyContinue | select nameexchange | select -ExpandProperty nameexchange
+        $results=Resolve-DnsName -Name $Domain -Type MX -DnsOnly -NoHostsFile -NoIdn -ErrorAction SilentlyContinue | Select-Object nameexchange | Select-Object -ExpandProperty nameexchange
         $filteredResults=$results -like "*.mail.protection.outlook.com"
 
         return ($filteredResults -eq $true) -and ($filteredResults.Count -gt 0)
@@ -28,7 +28,7 @@ function HasCloudSPF
     )
     Process
     {
-        $results=Resolve-DnsName -Name $Domain -Type txt -DnsOnly -NoHostsFile -NoIdn -ErrorAction SilentlyContinue | select strings | select -ExpandProperty strings 
+        $results=Resolve-DnsName -Name $Domain -Type txt -DnsOnly -NoHostsFile -NoIdn -ErrorAction SilentlyContinue | Select-Object strings | Select-Object -ExpandProperty strings 
 
         return ($results -like "*include:spf.protection.outlook.com*").Count -gt 0
     }
@@ -47,11 +47,72 @@ function HasDMARC
     {
         try
         {
-            $results=Resolve-DnsName -Name "_dmarc.$Domain" -Type txt -DnsOnly -NoHostsFile -NoIdn -ErrorAction SilentlyContinue | select strings | select -ExpandProperty strings 
+            $results=Resolve-DnsName -Name "_dmarc.$Domain" -Type txt -DnsOnly -NoHostsFile -NoIdn -ErrorAction SilentlyContinue | Select-Object strings | Select-Object -ExpandProperty strings 
         }catch{}
 
         return ($results -like "v=DMARC1*").Count -gt 0
     }
+}
+
+# Checks whether the domain has DKIM records for Exchange Online
+# Aug 14rd 2023
+function HasCloudDKIM
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]$Domain
+    )
+    Process
+    {
+        $selectors = @("selector1", "selector2")
+        foreach ($selector in $selectors)
+        {
+            try
+            {
+                $results = Resolve-DnsName -Name "$selector._domainkey.$($Domain)" -Type CNAME -DnsOnly -NoHostsFile -NoIdn -ErrorAction SilentlyContinue
+
+                if($results.NameHost -like "*_domainkey.*.onmicrosoft.com*")
+                {
+                    return $true
+                }
+            }catch {}
+        }
+        
+        return $false
+    }
+}
+
+# Checks whether the domain has MTA-STS records for Exchange Online
+# Aug 14rd 2023
+function HasCloudMTASTS {
+    param (
+        [string]$Domain
+    )
+
+    $url = "https://mta-sts.$Domain/.well-known/mta-sts.txt"
+    $mtaStsFound = $false
+    $outlookMxFound = $false
+
+    try {
+        $mtaStsResponse = Invoke-WebRequest -Uri $url -ErrorAction Stop
+        $mtaStsContent = $mtaStsResponse.Content
+        $mtaStsLines = $mtaStsContent -split "`r?`n"
+
+        foreach ($line in $mtaStsLines) {
+            if ($line -like "version: STSv1") {
+                $mtaStsFound = $true
+            }
+            if ($line -like "*mx: *.mail.protection.outlook.com*") {
+                $outlookMxFound = $true
+            }
+        }
+    } catch {
+        $mtaStsFound = $false
+        $outlookMxFound = $false
+    }
+
+    return ($mtaStsFound -eq $true) -and ($outlookMxFound -eq $true)
 }
 
 # Checks whether the domain has DesktopSSO enabled
@@ -95,7 +156,7 @@ function DoesUserExists
         [Parameter(Mandatory=$True)]
         [String]$User,
         [Parameter(Mandatory=$False)]
-        [ValidateSet("Normal","Login","Autologon")]
+        [ValidateSet("Normal","Login","Autologon","RST2")]
         [String]$Method="Normal"
     )
     Process
@@ -152,7 +213,7 @@ function DoesUserExists
                     $errorDetails = ($_.ErrorDetails.Message | convertfrom-json).error_description
                 }
             }
-            elseif($Method -eq "Autologon")
+            elseif("Autologon","RST2".Contains($Method))
             {
                 $requestId = (New-Guid).ToString()
 
@@ -163,57 +224,29 @@ function DoesUserExists
                 $created = $now.toUniversalTime().toString("o")
                 $expires = $now.addMinutes(10).toUniversalTime().toString("o")
 
-                $url = "https://autologon.microsoftazuread-sso.com/$domain/winauth/trust/2005/usernamemixed?client-request-id=$requestid"
-              
-                $body=@"
-<?xml version='1.0' encoding='UTF-8'?>
-<s:Envelope xmlns:s='http://www.w3.org/2003/05/soap-envelope' xmlns:wsse='http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd' xmlns:saml='urn:oasis:names:tc:SAML:1.0:assertion' xmlns:wsp='http://schemas.xmlsoap.org/ws/2004/09/policy' xmlns:wsu='http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd' xmlns:wsa='http://www.w3.org/2005/08/addressing' xmlns:wssc='http://schemas.xmlsoap.org/ws/2005/02/sc' xmlns:wst='http://schemas.xmlsoap.org/ws/2005/02/trust' xmlns:ic='http://schemas.xmlsoap.org/ws/2005/05/identity'>
-    <s:Header>
-        <wsa:Action s:mustUnderstand='1'>http://schemas.xmlsoap.org/ws/2005/02/trust/RST/Issue</wsa:Action>
-        <wsa:To s:mustUnderstand='1'>$url</wsa:To>
-        <wsa:MessageID>urn:uuid:$((New-Guid).ToString())</wsa:MessageID>
-        <wsse:Security s:mustUnderstand="1">
-            <wsu:Timestamp wsu:Id="_0">
-                <wsu:Created>$created</wsu:Created>
-                <wsu:Expires>$expires</wsu:Expires>
-            </wsu:Timestamp>
-            <wsse:UsernameToken wsu:Id="uuid-$((New-Guid).toString())">
-                <wsse:Username>$User</wsse:Username>
-                <wsse:Password>$Password</wsse:Password>
-            </wsse:UsernameToken>
-        </wsse:Security>
-    </s:Header>
-    <s:Body>
-        <wst:RequestSecurityToken Id='RST0'>
-            <wst:RequestType>http://schemas.xmlsoap.org/ws/2005/02/trust/Issue</wst:RequestType>
-                <wsp:AppliesTo>
-                    <wsa:EndpointReference>
-                        <wsa:Address>urn:federation:MicrosoftOnline</wsa:Address>
-                    </wsa:EndpointReference>
-                </wsp:AppliesTo>
-                <wst:KeyType>http://schemas.xmlsoap.org/ws/2005/05/identity/NoProofKey</wst:KeyType>
-        </wst:RequestSecurityToken>
-    </s:Body>
-</s:Envelope>
-"@
+                if($Method -eq "RST2")
+                {
+                    # RST2
+                    $url = "https://login.microsoftonline.com/RST2.srf"
+                    $endPoint = "sharepoint.com"
+                }
+                else
+                {
+                    # AutoLogon
+                    $url = "https://autologon.microsoftazuread-sso.com/$domain/winauth/trust/2005/usernamemixed?client-request-id=$requestid"
+                    $endPoint = "urn:federation:MicrosoftOnline"
+                }
+                
                 $exists = $false
 
                 try
                 {
-                    $response = Invoke-RestMethod -UseBasicParsing -Uri $url -Method Post -Body $body -ErrorAction SilentlyContinue
+                    $response = Get-RSTToken -Url $url -EndpointAddress $endPoint -UserName $User -Password $password
                     $exists = $true # Very bad password
                 }
                 catch
                 {
-                    $stream = $_.Exception.Response.GetResponseStream()
-                    $responseBytes = New-Object byte[] $stream.Length
-
-                    $stream.Position = 0
-                    $stream.Read($responseBytes,0,$stream.Length) | Out-Null
-            
-                    $responseXml = [xml][text.encoding]::UTF8.GetString($responseBytes)
-
-                    $errorDetails = $responseXml.Envelope.Body.Fault.Detail.error.internalerror.text
+                    $errorDetails = $_.Exception.Message
                 }
             }
 
@@ -240,13 +273,63 @@ function DoesUserExists
                 {
                     $exists = $False
                 }
+                elseif($errorDetails.StartsWith("AADSTS50059")) # No tenant-identifying information found in either the request or implied by any provided credentials.
+                {
+                    $exists = $False
+                }
+                elseif($errorDetails.StartsWith("AADSTS81016")) # Invalid STS request.
+                {
+                    Write-Warning "Got Invalid STS request. The tenant may not have DesktopSSO or Directory Sync enabled."
+                    Remove-Variable exists
+                }
                 else
                 {
+                    # Can't be sure so return empty
                     Remove-Variable exists
                 }
             }
         }
 
         return $exists
+    }
+}
+
+# Checks whether the tenant has MDI enabled
+# Mar 11th 2023
+function GetMDIInstance
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]$Tenant
+    )
+    Process
+    {
+        # Ref: https://learn.microsoft.com/en-us/defender-for-identity/configure-proxy#enable-access-to-defender-for-identity-service-urls-in-the-proxy-server
+        # Ref: https://github.com/thalpius/Microsoft-Defender-for-Identity-Check-Instance
+        # The MDI url is <instance>.atp.azure.com where instance is the tenant or tenant-onmicrosoft-com
+
+        # Get the instance part if FQDN is provided
+        if($Tenant.IndexOf(".") -ge 0)
+        {
+            $Tenant=$Tenant.Substring(0,$Tenant.IndexOf("."))
+        }
+
+        Write-Verbose "Getting MDI Instance for $Tenant"
+
+        $domains =@(
+            "$tenant.atp.azure.com",
+            "$tenant-onmicrosoft-com.atp.azure.com"
+        )
+        foreach($domain in $domains)
+        {
+            $results=Resolve-DnsName -Name $Domain -DnsOnly -NoHostsFile -NoIdn -ErrorAction SilentlyContinue
+            if($results)
+            {
+                return $domain
+            }
+        }
+
+        return $null
     }
 }

@@ -11,6 +11,14 @@ function Get-UserPRTToken
     .DESCRIPTION
     Gets user's PRT token from the Azure AD joined or Hybrid joined computer.
     Uses browsercore.exe or Token Provider DLL to get the PRT token.
+
+    .Parameter Method
+    Method to use to retrieve the user's PRT token.
+    "BrowserCore" for browsercore.exe or "TokenProvider" for Token Provider DLL
+
+    .EXAMPLE
+    PS C:\> Get-AADIntUserPRTToken
+    eyJ4NWMiOi...
 #>
     [cmdletbinding()]
     Param(
@@ -93,17 +101,16 @@ function Get-UserPRTToken
                 Throw "Error getting PRT: $($response.code). $($response.description)"
             }
 
-            # Return the last one
-            $tokens = $response.response.data
-            if($tokens.Count -gt 1)
+            # Get the index of the x-ms-RefreshTokenCredential data or throw error
+            $token_index = $response.response.name.IndexOf("x-ms-RefreshTokenCredential")
+            if($token_index -lt 0)
             {
-                return $tokens[$tokens.Count - 1]
+                throw "Could not find the x-ms-RefreshTokenCredential cookie in response"
             }
-            else
-            {
-                return $tokens
-            }
-                
+
+            # Return the data for x-ms-RefreshTokenCredential
+            $tokens = $response.response[$token_index].data
+            return $tokens
         }
         else
         {
@@ -113,8 +120,15 @@ function Get-UserPRTToken
             {
                 Write-Verbose "Found $($tokens.Count) token(s)."
 
-                # Return the last one
-                $token = $tokens[$tokens.Count - 1]["data"]
+                # Get the index of the x-ms-RefreshTokenCredential data or throw error
+                $token_index = $tokens.name.IndexOf("x-ms-RefreshTokenCredential")
+                if($token_index -lt 0)
+                {
+                    throw "Could not find the x-ms-RefreshTokenCredential cookie in response"
+                }
+
+                # Return the data for x-ms-RefreshTokenCredential
+                $token = $tokens[$token_index]["data"]
                 
                 return $token.Split(";")[0]
             }
@@ -258,23 +272,13 @@ function New-UserPRTToken
 
         $key = Get-PRTDerivedKey -Context $derivedContext -SessionKey $sKey
 
-        # Fetch the nonce!
-        if($GetNonce) 
+        # Fetch the nonce if not provided
+        if([string]::IsNullOrEmpty($Nonce))
         {
-            # Create a temporary JWT and get the nonce (the Resource & ClientId can be anything)
-            $jwt = New-JWT -Key $key -Header $hdr -Payload $pld
-            $Nonce = Get-AccessTokenWithPRT -GetNonce -Cookie $jwt -Resource "I Love" -ClientId "Microsoft"
+            $Nonce = (Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token" -Body "grant_type=srv_challenge").Nonce
         }
-
-        # If nonce is given (or fetched), use it!
-        if($Nonce)
-        {
-            $pld["request_nonce"] = $Nonce
-        }
-        else
-        {
-            Write-Warning "No nonce provided so the token is invalid. Use -GetNonce switch or provide the nonce with -Nonce" 
-        }
+        $pld["request_nonce"] = $Nonce
+        
 
         # As the payload may have changed due to nonce, derive the key again if needed
         if($KdfV2)
@@ -350,12 +354,12 @@ function Join-DeviceToAzureAD
     PS\:>Join-AADIntDeviceToAzureAD -DeviceName "My computer" -DeviceType "Commodore" -OSVersion "C64"
 
     Device successfully registered to Azure AD:
-      DisplayName:     "My computer"
-      DeviceId:        d03994c9-24f8-41ba-a156-1805998d6dc7
-      ObjectId:        afdeac87-b32a-41a0-95ad-0a555a91f0a4
-      TenantId:        8aeb6b82-6cc7-4e33-becd-97566b330f5b
-      Cert thumbprint: 78CC77315A100089CF794EE49670552485DE3689
-      Cert file name : "d03994c9-24f8-41ba-a156-1805998d6dc7.pfx"
+      DisplayName:      "My computer"
+      DeviceId:         d03994c9-24f8-41ba-a156-1805998d6dc7
+      AuthUserObjectId: afdeac87-b32a-41a0-95ad-0a555a91f0a4
+      TenantId:         8aeb6b82-6cc7-4e33-becd-97566b330f5b
+      Cert thumbprint:  78CC77315A100089CF794EE49670552485DE3689
+      Cert file name :  "d03994c9-24f8-41ba-a156-1805998d6dc7.pfx"
     Local SID:
       S-1-5-32-544
     Additional SIDs:
@@ -368,12 +372,12 @@ function Join-DeviceToAzureAD
     PS\:>Join-AADIntDeviceToAzureAD -DeviceName "My computer" -DeviceType "Commodore" -OSVersion "C64" -JoinType Register
 
     Device successfully registered to Azure AD:
-      DisplayName:     "My computer"
-      DeviceId:        d03994c9-24f8-41ba-a156-1805998d6dc7
-      ObjectId:        afdeac87-b32a-41a0-95ad-0a555a91f0a4
-      TenantId:        8aeb6b82-6cc7-4e33-becd-97566b330f5b
-      Cert thumbprint: 78CC77315A100089CF794EE49670552485DE3689
-      Cert file name : "d03994c9-24f8-41ba-a156-1805998d6dc7.pfx"
+      DisplayName:      "My computer"
+      DeviceId:         d03994c9-24f8-41ba-a156-1805998d6dc7
+      AuthUserObjectId: afdeac87-b32a-41a0-95ad-0a555a91f0a4
+      TenantId:         8aeb6b82-6cc7-4e33-becd-97566b330f5b
+      Cert thumbprint:  78CC77315A100089CF794EE49670552485DE3689
+      Cert file name :  "d03994c9-24f8-41ba-a156-1805998d6dc7.pfx"
     Local SID:
       S-1-5-32-544
     Additional SIDs:
@@ -385,12 +389,12 @@ function Join-DeviceToAzureAD
     PS C\:>Join-AADIntDeviceToAzureAD -DeviceName "My computer" -SID "S-1-5-21-685966194-1071688910-211446493-3729" -PfxFileName .\f24f116f-6e80-425d-8236-09803da7dfbe-user.pfx -TenantId 40cb9912-555c-42b8-80e9-3b3ad50dda8a
 
     Device successfully registered to Azure AD:
-      DisplayName:     "My computer"
-      DeviceId:        f24f116f-6e80-425d-8236-09803da7dfbe
-      ObjectId:        afdeac87-b32a-41a0-95ad-0a555a91f0a4
-      TenantId:        8aeb6b82-6cc7-4e33-becd-97566b330f5b
-      Cert thumbprint: A531B73CFBAB2BA26694BA2AD31113211CC2174A
-      Cert file name : "f24f116f-6e80-425d-8236-09803da7dfbe.pfx"
+      DisplayName:      "My computer"
+      DeviceId:         f24f116f-6e80-425d-8236-09803da7dfbe
+      AuthUserObjectId: afdeac87-b32a-41a0-95ad-0a555a91f0a4
+      TenantId:         8aeb6b82-6cc7-4e33-becd-97566b330f5b
+      Cert thumbprint:  A531B73CFBAB2BA26694BA2AD31113211CC2174A
+      Cert file name :  "f24f116f-6e80-425d-8236-09803da7dfbe.pfx"
 
 #>
     [cmdletbinding()]
@@ -476,7 +480,7 @@ function Join-DeviceToAzureAD
         $oids = Parse-CertificateOIDs -Certificate $deviceCert
         $deviceId = $oids.DeviceId.ToString()
         $tenantId = $oids.TenantId.ToString()
-        $objectId = $oids.ObjectId.ToString()
+        $authUserObjectId = $oids.AuthUserObjectId.ToString()
 
         # Write the device certificate to disk
         Set-BinaryContent -Path "$deviceId.pfx" -Value $deviceCert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx)
@@ -485,12 +489,12 @@ function Join-DeviceToAzureAD
         Unload-PrivateKey -PrivateKey $deviceCert.PrivateKey
 
         Write-Host "Device successfully registered to Azure AD:"
-        Write-Host "  DisplayName:     ""$DeviceName"""
-        Write-Host "  DeviceId:        $deviceId"
-        Write-Host "  ObjectId:        $objectId"
-        Write-Host "  TenantId:        $tenantId"
-        Write-Host "  Cert thumbprint: $($regResponse.Certificate.Thumbprint)"
-        Write-host "  Cert file name : ""$deviceId.pfx"""
+        Write-Host "  DisplayName:      ""$DeviceName"""
+        Write-Host "  DeviceId:         $deviceId"
+        Write-Host "  AuthUserObjectId: $authUserObjectId"
+        Write-Host "  TenantId:         $tenantId"
+        Write-Host "  Cert thumbprint:  $($regResponse.Certificate.Thumbprint)"
+        Write-host "  Cert file name :  ""$deviceId.pfx"""
 
         foreach($change in $regResponse.MembershipChanges)
         {
@@ -851,11 +855,24 @@ function Get-UserPRTKeys
     .Parameter Credentials
     Credentials of the user.
 
+    .Parameter CloudAP
+    Get PRT and Session key from CloudAP cache using user's credentials
+
     .Parameter OSVersion
     The operating system version of the device. Defaults to "10.0.18363.0"
 
     .Parameter UseRefreshToken
     Uses cached refresh token instead of credentials. Use Get-AADIntAccessTokenForMDM with -SaveToCache switch.
+
+    .Parameter TransportKeyFileName
+    Name of the .PEM file containing the transport key
+
+    .Parameter WHfBKeyFileName
+    Name of the .PEM file containing the Windows Hello for Business (WHfB) key.
+    If provided, AADInternals is trying to use WHfB key as the proof-of-identity
+
+    .Parameter UseDeviceCertForWHfB
+    If set, AADInternals is trying to use the provided device certificate key as WHfB key.
 
     .Parameter SAMLToken
     Uses the provided SAML token instead of credentials. 
@@ -865,12 +882,12 @@ function Get-UserPRTKeys
     PS C:\>Join-AADIntAzureAD -DeviceName "My computer" -DeviceType "Commodore" -OSVersion "C64"
 
     Device successfully registered to Azure AD:
-      DisplayName:     "My computer"
-      DeviceId:        d03994c9-24f8-41ba-a156-1805998d6dc7
-      ObjectId:        afdeac87-b32a-41a0-95ad-0a555a91f0a4
-      TenantId:        8aeb6b82-6cc7-4e33-becd-97566b330f5b
-      Cert thumbprint: 78CC77315A100089CF794EE49670552485DE3689
-      Cert file name : "d03994c9-24f8-41ba-a156-1805998d6dc7.pfx"
+      DisplayName:      "My computer"
+      DeviceId:         d03994c9-24f8-41ba-a156-1805998d6dc7
+      AuthUserObjectId: afdeac87-b32a-41a0-95ad-0a555a91f0a4
+      TenantId:         8aeb6b82-6cc7-4e33-becd-97566b330f5b
+      Cert thumbprint:  78CC77315A100089CF794EE49670552485DE3689
+      Cert file name :  "d03994c9-24f8-41ba-a156-1805998d6dc7.pfx"
     Local SID:
       S-1-5-32-544
     Additional SIDs:
@@ -882,19 +899,19 @@ function Get-UserPRTKeys
 
     PS C:\>$prtKeys = Get-AADIntUserPRTKeys -PfxFileName .\d03994c9-24f8-41ba-a156-1805998d6dc7.pfx -Credentials $cred
 
-    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys -GetNonce
+    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys
 
     .EXAMPLE
     Get-AADIntAccessTokenForAADJoin -SaveToCache
     PS C:\>Join-AADIntAzureAD -DeviceName "My computer" -DeviceType "Commodore" -OSVersion "C64"
 
     Device successfully registered to Azure AD:
-      DisplayName:     "My computer"
-      DeviceId:        d03994c9-24f8-41ba-a156-1805998d6dc7
-      ObjectId:        afdeac87-b32a-41a0-95ad-0a555a91f0a4
-      TenantId:        8aeb6b82-6cc7-4e33-becd-97566b330f5b
-      Cert thumbprint: 78CC77315A100089CF794EE49670552485DE3689
-      Cert file name : "d03994c9-24f8-41ba-a156-1805998d6dc7.pfx"
+      DisplayName:      "My computer"
+      DeviceId:         d03994c9-24f8-41ba-a156-1805998d6dc7
+      AuthUserObjectId: afdeac87-b32a-41a0-95ad-0a555a91f0a4
+      TenantId:         8aeb6b82-6cc7-4e33-becd-97566b330f5b
+      Cert thumbprint:  78CC77315A100089CF794EE49670552485DE3689
+      Cert file name :  "d03994c9-24f8-41ba-a156-1805998d6dc7.pfx"
     Local SID:
       S-1-5-32-544
     Additional SIDs:
@@ -906,19 +923,19 @@ function Get-UserPRTKeys
 
     PS C:\>$prtKeys = Get-AADIntUserPRTKeys -PfxFileName .\d03994c9-24f8-41ba-a156-1805998d6dc7.pfx -UseRefreshToken
 
-    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys -GetNonce
+    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys
 
     .EXAMPLE
     Get-AADIntAccessTokenForAADJoin -SaveToCache
     PS C:\>Join-AADIntAzureAD -DeviceName "My computer" -DeviceType "Commodore" -OSVersion "C64"
 
     Device successfully registered to Azure AD:
-      DisplayName:     "My computer"
-      DeviceId:        d03994c9-24f8-41ba-a156-1805998d6dc7
-      ObjectId:        afdeac87-b32a-41a0-95ad-0a555a91f0a4
-      TenantId:        8aeb6b82-6cc7-4e33-becd-97566b330f5b
-      Cert thumbprint: 78CC77315A100089CF794EE49670552485DE3689
-      Cert file name : "d03994c9-24f8-41ba-a156-1805998d6dc7.pfx"
+      DisplayName:      "My computer"
+      DeviceId:         d03994c9-24f8-41ba-a156-1805998d6dc7
+      AuthUserObjectId: afdeac87-b32a-41a0-95ad-0a555a91f0a4
+      TenantId:         8aeb6b82-6cc7-4e33-becd-97566b330f5b
+      Cert thumbprint:  78CC77315A100089CF794EE49670552485DE3689
+      Cert file name :  "d03994c9-24f8-41ba-a156-1805998d6dc7.pfx"
     Local SID:
       S-1-5-32-544
     Additional SIDs:
@@ -930,7 +947,7 @@ function Get-UserPRTKeys
 
     PS C:\>$prtKeys = Get-AADIntUserPRTKeys -PfxFileName .\d03994c9-24f8-41ba-a156-1805998d6dc7.pfx -SAMLToken $saml
 
-    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys -GetNonce
+    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys
 
     .Example
     PS C\:>Export-AADIntLocalDeviceCertificate
@@ -945,7 +962,7 @@ function Get-UserPRTKeys
 
     PS C\:>$prtKeys = Get-AADIntUserPRTKeys -PfxFileName .\f72ad27e-5833-48d3-b1d6-00b89c429b91.pfx -TransportKeyFileName .\f72ad27e-5833-48d3-b1d6-00b89c429b91_tk.pem -Credentials $creds
 
-    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys -GetNonce
+    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys
 
     .Example
     PS C\:>Export-AADIntLocalDeviceCertificate
@@ -958,7 +975,20 @@ function Get-UserPRTKeys
    
     PS C\:>$prtKeys = Get-AADIntUserPRTKeys -PfxFileName .\f72ad27e-5833-48d3-b1d6-00b89c429b91.pfx -TransportKeyFileName .\f72ad27e-5833-48d3-b1d6-00b89c429b91_tk.pem
 
-    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys -GetNonce
+    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys
+	
+	.Example
+	PS C\:>$creds = Get-Credential
+    PS C\:>$prtKeys = Get-AADIntUserPRTKeys -CloudAP -Credentials $creds
+	
+	WARNING: Elevating to LOCAL SYSTEM. You MUST restart PowerShell to restore AzureAD\User1 rights.
+	Keys saved to 31abceff-a84c-4f3b-9461-582435d7d448.json
+
+    PS C:\>$prttoken = New-AADIntUserPRTToken -Settings $prtkeys
+
+    .EXAMPLE
+    
+    PS C:\>$prtKeys = Get-AADIntUserPRTKeys -PfxFileName .\d03994c9-24f8-41ba-a156-1805998d6dc7.pfx -UseDeviceCertForWHfB -UserName user@company.com
 #>
     [cmdletbinding()]
     Param(
@@ -976,6 +1006,13 @@ function Get-UserPRTKeys
         [Parameter(Mandatory=$False)]
         [string]$TransportKeyFileName,
 
+        [Parameter(Mandatory=$False)]
+        [string]$WHfBKeyFileName,
+        [Parameter(Mandatory=$False)]
+        [string]$UserName,
+        [Parameter(Mandatory=$False)]
+        [switch]$UseDeviceCertForWHfB,
+
         [Parameter(ParameterSetName='RTFileAndPassword',Mandatory=$True)]
         [Parameter(ParameterSetName='RTCertificate'    ,Mandatory=$True)]
         [switch]$UseRefreshToken,
@@ -983,138 +1020,226 @@ function Get-UserPRTKeys
         [Parameter(Mandatory=$False)]
         [String]$SAMLToken,
 
+        [Parameter(ParameterSetName='CloudAP'    ,Mandatory=$True)]
+        [switch]$CloudAP,
+
+        [Parameter(ParameterSetName='CloudAP'    ,Mandatory=$True)]
         [Parameter(Mandatory=$False)]
         [System.Management.Automation.PSCredential]$Credentials,
 
         [Parameter(Mandatory=$False)]
-        [String]$OSVersion="10.0.18363.0"
+        [String]$OSVersion="10.0.18363.0",
+
+        [Parameter(Mandatory=$False)]
+        [switch]$IncludePartialTGT
     )
 
     Process
     {
-        # Load the certificate if not provided
-        if(!$Certificate)
+        # Try to get from CloudAP using the provided credentials
+        if($CloudAP)
         {
-            $Certificate = Load-Certificate -FileName $PfxFileName -Password $PfxPassword -Exportable
-        }
-
-        # Get the private key
-        $privateKey = Load-PrivateKey -Certificate $Certificate
-
-        # Get the public key
-        $publicKey = $certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
-
-        # Parse certificate information
-        $oids = Parse-CertificateOIDs -Certificate $Certificate
-        $deviceId = $oids.DeviceId.ToString()
-        $tenantId = $oids.TenantId.ToString()
-        $objectId = $oids.ObjectId.ToString()
-
-        $body = "grant_type=srv_challenge" 
-        
-        # Get the nonce
-        $response = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/$tenantId/oauth2/token" -Body $body
-        $nonce = $response.Nonce
-        Remove-Variable body
-
-        # Construct the header
-        $headerObj = [ordered]@{
-            "alg" = "RS256"
-            "typ" = "JWT"
-            "x5c" = Convert-ByteArrayToB64 ($publicKey)
-        }
-        $header = Convert-ByteArrayToB64 -Bytes ([text.encoding]::UTF8.GetBytes(($headerObj | ConvertTo-Json -Compress))) -NoPadding
-
-        # Construct the payload
-        $payloadObj=@{
-            "client_id"     = "38aa3b87-a06d-4817-b275-7a316988d93b"
-            "request_nonce" = "$nonce"
-            "scope"         ="openid aza ugs"
-            "win_ver"       = "$OSVersion"
-        }
-        if($SAMLToken)
-        {
-            $payloadObj["grant_type"] = "urn:ietf:params:oauth:grant-type:saml1_1-bearer"
-            $payloadObj["assertion"]  =  Convert-TextToB64 -Text  $SAMLToken
-        }
-        elseif($Credentials)
-        {
-            $payloadObj["grant_type"] = "password"
-            $payloadObj["username"]   = $Credentials.UserName
-            $payloadObj["password"]   = $Credentials.GetNetworkCredential().Password
-        }
-        elseif($UseRefreshToken)
-        {
-            # Trying to get the refresh token from the cache
-            $refresh_token = $script:refresh_tokens["29d9ed98-a469-4536-ade2-f981bc1d605e-https://graph.windows.net"]
-            if([string]::IsNullOrEmpty($refresh_token))
-            {
-                Throw "No refresh token found! Use Get-AADIntAccessTokenForIntuneMDM with -SaveToCache switch and try again."
-            }
-            
-            $tokens = Get-AccessTokenWithRefreshToken -RefreshToken $refresh_token -Resource "1b730954-1685-4b74-9bfd-dac224a7b894" -ClientId "29d9ed98-a469-4536-ade2-f981bc1d605e" -TenantId Common -IncludeRefreshToken $true 
-
-            $payloadObj["grant_type"]    = "refresh_token"
-            $payloadObj["refresh_token"] = $tokens[1]
-            $payloadObj["client_id"]     = "29d9ed98-a469-4536-ade2-f981bc1d605e"
+            $response = Get-UserPRTKeysFromCloudAP -Credentials $Credentials 
+            $deviceId = $response.DeviceId
         }
         else
         {
-            # Get access token interactively (supports MFA)
-            $tokens = Get-AccessToken -ClientId "29d9ed98-a469-4536-ade2-f981bc1d605e" -PfxFileName $PfxFileName -Resource "1b730954-1685-4b74-9bfd-dac224a7b894" -IncludeRefreshToken $true -ForceMFA $true
-
-            $payloadObj["grant_type"]    = "refresh_token"
-            $payloadObj["refresh_token"] = $tokens[1]
-            $payloadObj["client_id"]     = "29d9ed98-a469-4536-ade2-f981bc1d605e"
-        }
-
-        $payload = Convert-ByteArrayToB64 -Bytes ([text.encoding]::UTF8.GetBytes( ($payloadObj | ConvertTo-Json -Compress ) )) -NoPadding
-
-        # Construct the JWT data to be signed
-        $dataBin = [text.encoding]::UTF8.GetBytes(("{0}.{1}" -f $header,$payload))
-
-        # Get the signature
-        $sigBin = Sign-JWT -PrivateKey $PrivateKey -Data $dataBin
-        $sigB64 = Convert-ByteArrayToB64 $sigBin -UrlEncode -NoPadding
-
-        # B64 URL encode
-        $signature = $sigB64
-
-        # Construct the JWT
-        $jwt = "{0}.{1}.{2}" -f $header,$payload,$signature
-
-        # Construct the body
-        $body = @{
-            "windows_api_version" = "2.0"
-            "grant_type"          = "urn:ietf:params:oauth:grant-type:jwt-bearer"
-            "request"             = "$jwt"
-            "client_info"         = "1"
-        }
-
-        # Make the request
-        $response = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/$TenantId/oauth2/token" -ContentType "application/x-www-form-urlencoded" -Body $body -ErrorAction SilentlyContinue
-
-        if(!$response.token_type)
-        {
-            throw "Error getting session key. Check your credentials!"
-        }
-
-        # Decrypt the session key and add it to return value
-        try
-        {
-            if($TransportKeyFileName)
+            # Load the certificate if not provided
+            if(!$Certificate)
             {
-                # Get the transport key from the provided file 
-                $tkPEM = (Get-Content $TransportKeyFileName) -join "`n"
-                $tkParameters = Convert-PEMToRSA -PEM $tkPEM
-                $privateKey = [System.Security.Cryptography.RSA]::Create($tkParameters)
+                $Certificate = Load-Certificate -FileName $PfxFileName -Password $PfxPassword -Exportable
             }
-            $sessionKey = Decrypt-JWE -JWE $response.session_key_jwe -PrivateKey $privateKey
-            $response | Add-Member -NotePropertyName "session_key" -NotePropertyValue (Convert-ByteArrayToB64 -Bytes $sessionKey)
-        }
-        catch
-        {
-            Write-Error $($_.Exception.Message)
+
+            # Get the private key
+            $privateKey = Load-PrivateKey -Certificate $Certificate
+
+            # Get the public key
+            $publicKey = $certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+
+            # Parse certificate information
+            $oids = Parse-CertificateOIDs -Certificate $Certificate
+            $deviceId = $oids.DeviceId.ToString()
+            $tenantId = $oids.TenantId.ToString()
+            $objectId = $oids.AuthUserObjectId.ToString()
+
+            # Get the nonce
+            $nonce = (Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/common/oauth2/token" -Body "grant_type=srv_challenge").Nonce
+
+            # Construct the header
+            $headerObj = [ordered]@{
+                "alg" = "RS256"
+                "typ" = "JWT"
+                "x5c" = Convert-ByteArrayToB64 ($publicKey)
+            }
+            $header = Convert-ByteArrayToB64 -Bytes ([text.encoding]::UTF8.GetBytes(($headerObj | ConvertTo-Json -Compress))) -NoPadding
+
+            # Construct the payload
+            $payloadObj=@{
+                "client_id"     = "38aa3b87-a06d-4817-b275-7a316988d93b"
+                "request_nonce" = "$nonce"
+                "scope"         = "openid aza ugs"
+                "win_ver"       = "$OSVersion"
+            }
+            if($SAMLToken)
+            {
+                $payloadObj["grant_type"] = "urn:ietf:params:oauth:grant-type:saml1_1-bearer"
+                $payloadObj["assertion"]  =  Convert-TextToB64 -Text  $SAMLToken
+            }
+            elseif($Credentials)
+            {
+                $payloadObj["grant_type"] = "password"
+                $payloadObj["username"]   = $Credentials.UserName
+                $payloadObj["password"]   = $Credentials.GetNetworkCredential().Password
+            }
+            elseif($UseRefreshToken)
+            {
+                # Trying to get the refresh token from the cache
+                $refresh_token = Get-RefreshTokenFromCache -ClientID "29d9ed98-a469-4536-ade2-f981bc1d605e" -Resource "https://graph.windows.net"
+                if([string]::IsNullOrEmpty($refresh_token))
+                {
+                    Throw "No refresh token found! Use Get-AADIntAccessTokenForIntuneMDM with -SaveToCache switch and try again."
+                }
+                
+                $tokens = Get-AccessTokenWithRefreshToken -RefreshToken $refresh_token -Resource "1b730954-1685-4b74-9bfd-dac224a7b894" -ClientId "29d9ed98-a469-4536-ade2-f981bc1d605e" -TenantId Common -IncludeRefreshToken $true 
+
+                $payloadObj["grant_type"]    = "refresh_token"
+                $payloadObj["refresh_token"] = $tokens[1]
+                $payloadObj["client_id"]     = "29d9ed98-a469-4536-ade2-f981bc1d605e"
+            }
+            elseif($WHfBKeyFileName -or $UseDeviceCertForWHfB)
+            {
+                # Use Device Certificate key as WHfB key
+                if($UseDeviceCertForWHfB)
+                {
+                    # Check do we have a user name
+                    if([string]::IsNullOrEmpty($UserName))
+                    {
+                        throw "User name must be provided with -Username parameter."
+                    }
+                    $whfbParameters = $privateKey.ExportParameters($true)
+                }
+                # Use the provided WHfB key
+                else
+                {
+                    # Check do we have a user name
+                    if([string]::IsNullOrEmpty($UserName))
+                    {
+                        # Try to parse from the file name
+                        try
+                        {
+                            Write-Warning "Username not provided, trying to parse from the filename"
+                            $UserName = $WHfBKeyFileName.Split("_")[2]    
+                            Write-Verbose "Using $UserName for WHfB assertion."
+                        }
+                        catch
+                        {
+                            throw "Could not parse username from the filename, please provide user with -UserName parameter."
+                        }
+                    }
+                    # Load WHfB key from the PEM file
+                    $whfbPEM = (Get-Content $WHfBKeyFileName) -join "`n"
+                    $whfbParameters = Convert-PEMToRSA -PEM $whfbPEM
+                }
+
+                # Set the parameters
+                $now = (Get-Date).toUniversalTime()
+                $assertion_iss = $UserName
+                $assertion_kid = Convert-ByteArrayToB64 -Bytes ([System.Security.Cryptography.SHA256]::Create().ComputeHash( (New-KeyBLOB -Parameters $whfbParameters -Type RSA1)))
+                $assertion_aud = $TenantId
+                $assertion_iat = [int](($now)-$epoch).TotalSeconds
+                $assertion_exp = [int](($now).AddMinutes(10)-$epoch).TotalSeconds
+
+                $assertion_hdr = [ordered]@{
+                    "alg" = "RS256"
+                    "typ" = "JWT"
+                    "kid" = $assertion_kid
+                    "use" = "ngc"
+                }
+
+                $assertion_pld = [ordered]@{
+                    "iss" = $assertion_iss
+                    "aud" = $assertion_aud
+                    "iat" = $assertion_iat
+                    "exp" = $assertion_exp
+                    "scope" = "openid aza ugs"
+                }
+
+                # Create and sign the assertion JWT
+                $assertion = New-JWT -PrivateKey ([System.Security.Cryptography.RSA]::Create($whfbParameters)) -Header $assertion_hdr -Payload $assertion_pld
+
+                $payloadObj["grant_type"] = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+                $payloadObj["assertion"]  = $assertion
+            }
+            else
+            {
+                # Get access token interactively (supports MFA)
+                $tokens = Get-AccessToken -ClientId "29d9ed98-a469-4536-ade2-f981bc1d605e" -PfxFileName $PfxFileName -Resource "1b730954-1685-4b74-9bfd-dac224a7b894" -IncludeRefreshToken $true
+
+                $payloadObj["grant_type"]    = "refresh_token"
+                $payloadObj["refresh_token"] = $tokens[1]
+                $payloadObj["client_id"]     = "29d9ed98-a469-4536-ade2-f981bc1d605e"
+            }
+
+            $payload = Convert-ByteArrayToB64 -Bytes ([text.encoding]::UTF8.GetBytes( ($payloadObj | ConvertTo-Json -Compress ) )) -NoPadding
+
+            # Construct the JWT data to be signed
+            $dataBin = [text.encoding]::UTF8.GetBytes(("{0}.{1}" -f $header,$payload))
+
+            # Get the signature
+            $sigBin = Sign-JWT -PrivateKey $PrivateKey -Data $dataBin
+            $sigB64 = Convert-ByteArrayToB64 $sigBin -UrlEncode -NoPadding
+
+            # B64 URL encode
+            $signature = $sigB64
+
+            # Construct the JWT
+            $jwt = "{0}.{1}.{2}" -f $header,$payload,$signature
+
+            # Construct the body
+            $body = @{
+                "windows_api_version" = "2.0"
+                "grant_type"          = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+                "request"             = "$jwt"
+                "client_info"         = "1"
+            }
+
+            if ($IncludePartialTGT)
+            {
+                $body['tgt'] = $true
+            }
+
+            # Make the request
+            $response = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/$TenantId/oauth2/token" -ContentType "application/x-www-form-urlencoded" -Body $body -ErrorAction SilentlyContinue
+
+            if(!$response.token_type)
+            {
+                throw "Error getting session key. Check your credentials!"
+            }
+
+            # Decrypt the session key and add it to return value
+            try
+            {
+                if($TransportKeyFileName)
+                {
+                    # Get the transport key from the provided file 
+                    $tkPEM = (Get-Content $TransportKeyFileName) -join "`n"
+                    $tkParameters = Convert-PEMToRSA -PEM $tkPEM
+                    $privateKey = [System.Security.Cryptography.RSA]::Create($tkParameters)
+                }
+                $sessionKey = Decrypt-JWE -JWE $response.session_key_jwe -PrivateKey $privateKey
+                $response | Add-Member -NotePropertyName "session_key" -NotePropertyValue (Convert-ByteArrayToB64 -Bytes $sessionKey)
+
+                if ($IncludePartialTGT)
+                {
+                    $tgt = Decrypt-JWE -JWE $response.tgt_client_key -SessionKey $sessionKey
+                    $response | Add-Member -NotePropertyName "decrypted_tgt_client_key" -NotePropertyValue (Convert-ByteArrayToB64 -Bytes $tgt)
+                }
+
+            }
+            catch
+            {
+                Write-Error $($_.Exception.Message)
+            }
         }
 
         # Write to file
@@ -1122,8 +1247,12 @@ function Get-UserPRTKeys
         $response | ConvertTo-Json |Set-Content $outFileName -Encoding UTF8
         Write-Host "Keys saved to $outFileName"
 
-        # Unload the private key
-        Unload-PrivateKey -PrivateKey $privateKey
+        try
+        {
+            # Unload the private key
+            Unload-PrivateKey -PrivateKey $privateKey    
+        }
+        catch {}
 
         # Return
         $response
@@ -1721,6 +1850,20 @@ function New-BulkPRTToken
             {
                 Write-Warning "Got unauthorized_client error. Please try again."
             }
+            elseif($details.error_description.StartsWith("AADSTS90092"))
+            {
+                # Missing Microsoft.Azure.SyncFabric service principal?
+                try
+                {
+                    if([string]::IsNullOrEmpty((Get-ServicePrincipals -ClientIds "00000014-0000-0000-c000-000000000000").value))
+                    {
+                        Write-Warning "Missing Microsoft.Azure.SyncFabric service principal!"
+                        Write-Warning "Use Add-AADIntSyncFabricServicePrincipal to add the missing service principal."
+                    }
+
+                }
+                catch{} # Okay
+            }
             throw $details.error_description
         }
 
@@ -1736,5 +1879,172 @@ function New-BulkPRTToken
         Write-Host "BPRT saved to $outFileName`n"
 
         return $details.refresh_token
+    }
+}
+
+# Add WHfB key
+# May 5th 2023
+function Set-DeviceWHfBKey
+{
+<#
+    .SYNOPSIS
+    Sets a Windows Hello for Business (WHfB) key of the device.
+
+    .DESCRIPTION
+    Sets a Windows Hello for Business (WHfB) key of the device. Device information is included in the PRT token given as a parameter.
+
+    .Parameter AccessToken
+    Access token to register the WHfB key.
+
+    .Parameter Certificate
+    x509 certificate which private key is used as WHfB key.
+    If not provided, a new WHfB key is created.
+
+    .Parameter PfxFileName
+    File name of the .pfx certificate which private key is used as WHfB key.
+    If not provided, a new WHfB key is created.
+
+    .Parameter PfxPassword
+    The password of the .pfx certificate which private key is used as WHfB key.
+
+    .EXAMPLE
+    PS C:\> $prttoken = Get-AADIntUserPRTToken
+    PS C:\> Get-AADIntAccessTokenForWHfB -PRTToken $prttoken -SaveToCache
+    PS C:\> Set-AADIntDeviceWHfBKey
+
+    Device Window Hello for Business key successfully added to the user:
+    DeviceId:       b27db620-2673-4dac-a565-cec81bfafbaa
+    Key Id:         a07b4c9c-1515-4d79-9ce2-7f7954049adf
+    UPN:            user@company.com
+    Key file name : "b27db620-2673-4dac-a565-cec81bfafbaa_a07b4c9c-1515-4d79-9ce2-7f7954049adf_user@company.com_whfb.pem"
+
+    .EXAMPLE
+    PS C:\> Get-AADIntAccessTokenForAADJoin -SaveToCache
+    PS C:\> Join-AADIntDeviceToAzureAD -JoinType Join -DeviceName "My device"
+
+    Device successfully registered to Azure AD:
+        DisplayName:     "My device"
+        DeviceId:        b27db620-2673-4dac-a565-cec81bfafbaa
+        ObjectId:        4fbbb5f6-1563-4237-974c-dfabcc5c533c
+        TenantId:        01a09bec-7584-45a5-8048-e7f1b4181f20
+        Cert thumbprint: 593E3D7F8F8CE0DB74725EE3B5AC1B5F58D92994
+        Cert file name : "b27db620-2673-4dac-a565-cec81bfafbaa.pfx"
+    Local SID:
+        S-1-5-32-544
+    Additional SIDs:
+        S-1-12-1-1173396554-1264637767-1283444156-383767028
+        S-1-12-1-727559687-1332680371-478291341-2778853572
+        S-1-12-1-1337701878-1110906211-2883538071-1012096204
+
+    PS C:\> $prtkeys = Get-AADIntUserPRTKeys -PfxFileName .\b27db620-2673-4dac-a565-cec81bfafbaa.pfx
+
+    Keys saved to b27db620-2673-4dac-a565-cec81bfafbaa.json
+
+    PS C:\> $prttoken = New-AADIntUserPRTToken -Settings $prtkeys
+    PS C:\> Get-AADIntAccessTokenForWHfB -PRTToken $prttoken -SaveToCache
+    PS C:\> Set-AADIntDeviceWHfBKey -PfxFileName .\b27db620-2673-4dac-a565-cec81bfafbaa.pfx
+
+    Device Window Hello for Business key successfully added to the user:
+    DeviceId:       b27db620-2673-4dac-a565-cec81bfafbaa
+    Key Id:         a07b4c9c-1515-4d79-9ce2-7f7954049adf
+    UPN:            user@company.com
+#>
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]$AccessToken,
+
+        [Parameter(Mandatory=$False)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate,
+        [Parameter(Mandatory=$False)]
+        [string]$PfxFileName,
+        [Parameter(Mandatory=$False)]
+        [string]$PfxPassword
+    )
+    Process
+    {
+        # Get access token from cache if not provided
+        $AccessToken = Get-AccessTokenFromCache -AccessToken $AccessToken -ClientID "dd762716-544d-4aeb-a526-687b73838a22" -Resource "urn:ms-drs:enterpriseregistration.windows.net"
+
+        # Check that we have the required claims
+        $parsedAccessToken = Read-Accesstoken -AccessToken $AccessToken
+        if([string]::IsNullOrEmpty($parsedAccessToken.DeviceID))
+        {
+            throw "DeviceID claim not present in the access token."
+        }
+        if($parsedAccessToken.amr -notcontains "ngcmfa")
+        {
+            throw "ngcmfa claim not present in the access token."
+        }
+
+        # Load the certificate if not provided
+        if(!$Certificate)
+        {
+            # Load only if we have file name
+            if($PfxFileName)
+            {
+                $Certificate = Load-Certificate -FileName $PfxFileName -Password $PfxPassword -Exportable
+            }
+        }
+        # Use the private key of provided certificate
+        if($Certificate)
+        {
+            # Get the private key and use it's parameters
+            $privateKey = Load-PrivateKey -Certificate $Certificate
+            $RSAParameters = $privateKey.ExportParameters($true)
+            Unload-PrivateKey -PrivateKey $privateKey
+        }
+
+        # Create key pair if not provided
+        if($RSAParameters -eq $null)
+        {
+            $RSAParameters = [System.Security.Cryptography.RSACryptoServiceProvider]::new(2048).ExportParameters($true)
+        }
+
+        # Create the public key blob
+        $keyBlob = New-KeyBLOB -Parameters $RSAParameters -Type RSA1
+
+        # Create the headers and body
+        $headers = @{
+            "Authorization" = "Bearer $AccessToken"
+            "Accept"        = "application/json"
+        }
+        $body = @{
+            "kngc" = Convert-ByteArrayToB64 -Bytes $keyBlob
+        }
+        
+        # Make the request
+        try
+        {
+            $response = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://enterpriseregistration.windows.net/EnrollmentServer/key/?api-version=1.0" -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json; charset=utf-8"    
+        }
+        catch
+        {
+            throw ($_.ErrorDetails.Message | ConvertFrom-Json).error.message
+        }
+
+        # Check whether we have private key
+        if($RSAParameters.P)
+        {
+            # Write the private key to a file if not using provided certificate
+            if(-not $Certificate)
+            {
+                $fileName = "$($parsedAccessToken.DeviceId)_$($response.kid)_$($response.upn)_whfb.pem"
+                Set-Content $fileName -Value (Convert-RSAToPEM -RSAParameters $RSAParameters)
+            }
+        }
+        else
+        {
+            Write-Warning "The given RSAParameters didn't have private key - unable to save to a file."
+        }
+
+        Write-Host "Device Window Hello for Business key successfully added to the user:"
+        Write-Host "    DeviceId:       $($parsedAccessToken.DeviceId)"
+        Write-Host "    Key Id:         $($response.kid)"
+        Write-Host "    UPN:            $($response.upn)"
+        if(-not $Certificate)
+        {
+            Write-Host "    Key file name : `"$fileName`""
+        }
     }
 }
