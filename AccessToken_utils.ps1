@@ -49,6 +49,11 @@ $FOCIs = @{
     "e9b154d0-7658-433b-bb25-6b8e0a8a7c59" = "Outlook Lite"
 }
 
+# Resource ids
+$RESIDs = @{
+    "00000003-0000-0000-c000-000000000000" = "https://graph.microsoft.com"
+}
+
 # Stored tokens (access & refresh)
 $tokens=@{}
 $refresh_tokens=@{}
@@ -135,11 +140,13 @@ function Get-LoginInformation
             $UserName = "nn@$Domain"
         }
 
+        $subScope = Get-TenantSubscope -Domain $UserName.Split("@")[1]
+
         # Gather login information using different APIs
-        $realm1=Get-UserRealm -UserName $UserName          # common/userrealm API 1.0
-        $realm2=Get-UserRealmExtended -UserName $UserName  # common/userrealm API 2.0
-        $realm3=Get-UserRealmV2 -UserName $UserName        # GetUserRealm.srf (used in the old Office 365 login experience)
-        $realm4=Get-CredentialType -UserName $UserName     # common/GetCredentialType (used in the "new" Office 365 login experience)
+        $realm1=Get-UserRealm -UserName $UserName -SubScope $subScope         # common/userrealm API 1.0
+        $realm2=Get-UserRealmExtended -UserName $UserName -SubScope $subScope # common/userrealm API 2.0
+        $realm3=Get-UserRealmV2 -UserName $UserName -SubScope $subScope       # GetUserRealm.srf (used in the old Office 365 login experience)
+        $realm4=Get-CredentialType -UserName $UserName -SubScope $subScope    # common/GetCredentialType (used in the "new" Office 365 login experience)
 
         # Create a return object
         $attributes = @{
@@ -209,14 +216,16 @@ function Get-UserRealm
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory=$True)]
-        [String]$UserName
-
+        [String]$UserName,
+        [Parameter(Mandatory=$False)]
+        [Microsoft.PowerShell.Commands.WebRequestSession]$webSession,
+        [Parameter(Mandatory=$False)]
+        [String]$SubScope
     )
     Process
     {
-      
         # Call the API
-        $userRealm=Invoke-RestMethod -UseBasicParsing -Uri ("https://login.microsoftonline.com/common/userrealm/$UserName"+"?api-version=1.0")
+        $userRealm=Invoke-RestMethod -UseBasicParsing -Uri ("$(Get-TenantLoginUrl -SubScope $SubScope)/common/userrealm/$UserName"+"?api-version=1.0") -WebSession $webSession -Headers @{"User-agent" = Get-UserAgent}
 
         # Verbose
         Write-Verbose "USER REALM $($userRealm | Out-String)"
@@ -266,14 +275,14 @@ function Get-UserRealmExtended
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory=$True)]
-        [String]$UserName
-
+        [String]$UserName,
+        [Parameter(Mandatory=$False)]
+        [String]$SubScope
     )
     Process
     {
-      
         # Call the API
-        $userRealm=Invoke-RestMethod -UseBasicParsing -Uri ("https://login.microsoftonline.com/common/userrealm/$UserName"+"?api-version=2.0")
+        $userRealm=Invoke-RestMethod -UseBasicParsing -Uri ("$(Get-TenantLoginUrl -SubScope $SubScope)/common/userrealm/$UserName"+"?api-version=2.0") -Headers @{"User-agent" = Get-UserAgent}
 
         # Verbose
         Write-Verbose "USER REALM $($userRealm | Out-String)"
@@ -322,14 +331,14 @@ function Get-UserRealmV2
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory=$True)]
-        [String]$UserName
-
+        [String]$UserName,
+        [Parameter(Mandatory=$False)]
+        [String]$SubScope
     )
     Process
     {
-      
-        # Call the API
-        $userRealm=Invoke-RestMethod -UseBasicParsing -Uri ("https://login.microsoftonline.com/GetUserRealm.srf?login=$UserName")
+       # Call the API
+        $userRealm=Invoke-RestMethod -UseBasicParsing -Uri ("$(Get-TenantLoginUrl -SubScope $SubScope)/GetUserRealm.srf?login=$UserName") -Headers @{"User-agent" = Get-UserAgent}
 
         # Verbose
         Write-Verbose "USER REALM: $($userRealm | Out-String)"
@@ -394,20 +403,25 @@ function Get-CredentialType
         [Parameter(Mandatory=$False)]
         [String]$FlowToken,
         [Parameter(Mandatory=$False)]
-        [String]$OriginalRequest
+        [String]$OriginalRequest,
+        [Parameter(Mandatory=$False)]
+        [Microsoft.PowerShell.Commands.WebRequestSession]$webSession,
+        [Parameter(Mandatory=$False)]
+        [String]$SubScope
     )
     Process
     {
         # Create a body for REST API request
         $body = @{
             "username"=$UserName
-            "isOtherIdpSupported"  = $true
-	        "checkPhones"          = $true
-	        "isRemoteNGCSupported" = $false
-	        "isCookieBannerShown"  = $false
-	        "isFidoSupported"      = $false
-            "originalRequest"      = $OriginalRequest
-            "flowToken"            = $FlowToken
+            "isOtherIdpSupported"   = $true
+	        "checkPhones"           = $true
+	        "isRemoteNGCSupported"  = $true
+	        "isCookieBannerShown"   = $false
+	        "isFidoSupported"       = $true
+            "isAccessPassSupported" = $true
+            "originalRequest"       = $OriginalRequest
+            "flowToken"             = $FlowToken
         }
 
         # TAP support can only be requested if originalRequest is provided. Otherwise we'll get error code 6000.
@@ -419,10 +433,11 @@ function Get-CredentialType
         
       
         # Call the API
-        $userRealm=Invoke-RestMethod -UseBasicParsing -Uri ("https://login.microsoftonline.com/common/GetCredentialType") -ContentType "application/json; charset=UTF-8" -Method POST -Body ($body|ConvertTo-Json)
+        $userRealm=Invoke-RestMethod -UseBasicParsing -Uri ("$(Get-TenantLoginUrl -SubScope $SubScope)/common/GetCredentialType") -ContentType "application/json; charset=UTF-8" -Method POST -Body ($body|ConvertTo-Json) -WebSession $webSession -Headers @{"User-agent" = Get-UserAgent}
 
-        # Verbose
-        Write-Verbose "CREDENTIAL TYPE: $($userRealm | Out-String)"
+        # Verbose & Debug
+        Write-Verbose "CREDENTIAL TYPE: Exist=$($userRealm.IfExistsResult), Federated=$(![string]::IsNullOrEmpty($userRealm.Credentials.FederationRedirectUrl))"
+        Write-Debug "CREDENTIAL TYPE: $($userRealm | Out-String)"
 
         # Return
         $userRealm
@@ -490,7 +505,7 @@ function Get-OpenIDConfiguration
 
       
         # Call the API
-        $openIdConfig=Invoke-RestMethod -UseBasicParsing "https://login.microsoftonline.com/$domain/.well-known/openid-configuration"
+        $openIdConfig=Invoke-RestMethod -UseBasicParsing -Uri "https://login.microsoftonline.com/$domain/.well-known/openid-configuration" -Headers @{"User-agent" = Get-UserAgent}
 
         # Return
         $openIdConfig
@@ -539,7 +554,7 @@ function Get-TenantID
 
             Try
             {
-                $TenantId = (Invoke-RestMethod -UseBasicParsing -Uri "https://odc.officeapps.live.com/odc/v2.1/federationprovider?domain=$domain").TenantId
+                $TenantId = (Invoke-RestMethod -UseBasicParsing -Uri "https://odc.officeapps.live.com/odc/v2.1/federationprovider?domain=$domain" -Headers @{"User-agent" = Get-UserAgent}).TenantId
             }
             catch
             {
@@ -1017,6 +1032,11 @@ function Read-Accesstoken
     )
     Process
     {
+        if([string]::IsNullOrEmpty($AccessToken))
+        {
+            Write-Warning "Unable to read access token (null or empty)"
+            return $null
+        }
         # Token sections
         $sections =  $AccessToken.Split(".")
         if($sections.Count -eq 5)
@@ -1096,17 +1116,16 @@ function Prompt-Credentials
         [Parameter(Mandatory=$False)]
         [string]$OTPSecretKey,
         [Parameter(Mandatory=$False)]
-        [string]$TAP
+        [string]$TAP,
+        [Parameter(Mandatory=$False)]
+        [string]$RedirectURI,
+        [Parameter(Mandatory=$False)]
+        [string]$SubScope,
+        [Parameter(Mandatory=$False)]
+        [string]$ESTSAUTH
     )
     Process
     {
-        # User-Agent
-        $userAgent = Get-Setting -Setting "User-Agent"
-        if([string]::IsNullOrEmpty($userAgent))
-        {
-            $userAgent = "AADInternals"
-        }
-
         # Set AMR values as needed
         $amr = $null
         if($ForceMFA)
@@ -1120,9 +1139,10 @@ function Prompt-Credentials
 
         # If we have credentials, try first using ROPC flow
         $response = $null
-        if($Credentials -and [string]::IsNullOrEmpty($amr))
+        if($Credentials -and [string]::IsNullOrEmpty($amr) -and [string]::IsNullOrEmpty((Get-CredentialType -UserName $Credentials.UserName).Credentials.FederationRedirectUrl))
         {
-            Write-Verbose "Credentials provided and no MFA enforced, trying ROPC flow."
+
+            Write-Verbose "Domain not federated, credentials provided, and no MFA enforced. Trying ROPC flow."
 
             # Create a body for REST API request
             $body = @{
@@ -1138,10 +1158,14 @@ function Prompt-Credentials
             Write-Debug "AUTHENTICATION BODY: $($body | Out-String)"
 
             # Set the content type and call the Microsoft Online authentication API
-            $contentType="application/x-www-form-urlencoded"
+			# Headers
+			$headers = @{
+				"Content-Type" = "application/x-www-form-urlencoded"
+				"User-Agent"   = Get-UserAgent
+			}
             try
             {
-                $response=Invoke-RestMethod -UseBasicParsing -Uri "https://login.microsoftonline.com/common/oauth2/token" -ContentType $contentType -Method POST -Body $body -Headers $headers
+                $response=Invoke-RestMethod -UseBasicParsing -Uri "https://login.microsoftonline.com/common/oauth2/token" -Method POST -Body $body -Headers $headers
             }
             catch
             {
@@ -1158,25 +1182,31 @@ function Prompt-Credentials
             }
 
             # Get the authorization code
-            $authorizationCode = Get-AuthorizationCode -Resource $Resource -ClientId $ClientId -Tenant $Tenant -AMR $amr -RefreshTokenCredential $RefreshTokenCredential -UserAgent $userAgent -Credentials $Credentials -OTPSecretKey $OTPSecretKey -TAP $TAP
+            $authorizationCode = Get-AuthorizationCode -Resource $Resource -ClientId $ClientId -Tenant $Tenant -AMR $amr -RefreshTokenCredential $RefreshTokenCredential -Credentials $Credentials -OTPSecretKey $OTPSecretKey -TAP $TAP -RedirectURI $RedirectURI -SubScope $SubScope -ESTSAUTH $ESTSAUTH
 
             if($authorizationCode)
             {
+
+                if([string]::IsNullOrEmpty($RedirectURI))
+                {
+                    $RedirectURI = Get-AuthRedirectUrl -ClientId $ClientId -Resource $Resource
+                }
+
                 # Construct the body for auth code grant
                 $body = @{
                     client_id    = $ClientId
                     grant_type   = "authorization_code"
                     code         = $authorizationCode
-                    redirect_uri = Get-AuthRedirectUrl -ClientId $ClientId -Resource $Resource
+                    redirect_uri = $RedirectURI
                 }
 
                 # Headers
                 $headers = @{
                     "Content-Type" = "application/x-www-form-urlencoded"
-                    "User-Agent"   = $userAgent
+                    "User-Agent"   = Get-UserAgent
                 }
                 
-                $response = Invoke-RestMethod -UseBasicParsing -Uri "https://login.microsoftonline.com/$Tenant/oauth2/token" -Method POST -Body $body -Headers $headers
+                $response = Invoke-RestMethod -UseBasicParsing -Uri "$(Get-TenantLoginUrl -SubScope $SubScope)/$Tenant/oauth2/token" -Method POST -Body $body -Headers $headers
             }
         }
 
@@ -1580,20 +1610,35 @@ function Get-TenantDomains
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory=$True)]
-        [String]$Domain
+        [String]$Domain,
+        [Parameter(Mandatory=$False)]
+        [String]$SubScope
     )
     Process
     {
-        # Get Tenant Region Scope/Subscope from Open ID configuration
-        Try {$openIdConfig = Invoke-RestMethod -UseBasicParsing "https://login.microsoftonline.com/$Domain/.well-known/openid-configuration"}
-        catch {$openIdConfig = $null}
-        if($openIdConfig.tenant_region_sub_scope -eq "DOD") 
-            {$uri = "https://autodiscover-s-dod.office365.us/autodiscover/autodiscover.svc"} #DoD
-        elseif($openIdConfig.tenant_region_sub_scope -eq "DODCON") 
-            {$uri = "https://autodiscover-s.office365.us/autodiscover/autodiscover.svc"} # GCC-High
-        else 
-            {$uri = "https://autodiscover-s.outlook.com/autodiscover/autodiscover.svc"} #Commercial/WW
-        
+        # Get Tenant Region subscope from Open ID configuration if not provided
+        if([string]::IsNullOrEmpty($SubScope))
+        {
+            $SubScope = Get-TenantSubscope -Domain $Domain
+        }
+
+        # Use the correct url
+        switch($SubScope)
+        {
+            "DOD" # DoD
+            {
+                $uri = "https://autodiscover-s-dod.office365.us/autodiscover/autodiscover.svc"
+            }
+            "DODCON" # GCC-High
+            {
+                $uri = "https://autodiscover-s.office365.us/autodiscover/autodiscover.svc"
+            }
+            default # Commercial/GCC
+            {
+                $uri = "https://autodiscover-s.outlook.com/autodiscover/autodiscover.svc"
+            }
+        }
+
         # Create the body
         $body=@"
 <?xml version="1.0" encoding="utf-8"?>
@@ -1618,13 +1663,13 @@ function Get-TenantDomains
         $headers=@{
             "Content-Type" = "text/xml; charset=utf-8"
             "SOAPAction" =   '"http://schemas.microsoft.com/exchange/2010/Autodiscover/Autodiscover/GetFederationInformation"'
-            "User-Agent" =   "AutodiscoverClient"
+            "User-Agent" =   Get-UserAgent
         }
         # Invoke
         $response = Invoke-RestMethod -UseBasicParsing -Method Post -uri $uri -Body $body -Headers $headers
 
         # Return
-		$domains = $response.Envelope.body.GetFederationInformationResponseMessage.response.Domains.Domain
+		$domains = @($response.Envelope.body.GetFederationInformationResponseMessage.response.Domains.Domain)
 		if($Domain -notin $domains)
         {
             $domains += $Domain
@@ -1650,6 +1695,7 @@ function Get-AuthRedirectUrl
         $oobClients = @(
             "d3590ed6-52b3-4102-aeff-aad2292ab01c" # Microsoft Office
             "29d9ed98-a469-4536-ade2-f981bc1d605e" # Microsoft Authentication Broker
+            "9ba1a5c7-f17a-4de9-a1f1-6178c8d51223" # Microsoft Intune Company Portal
             )
     }
     Process
@@ -1733,586 +1779,6 @@ function Get-AuthRedirectUrl
         }
 
         return $redirect_uri
-    }
-}
-
-# Exports Teams access tokens from the Teams cache
-# Sep 26th 2022
-function Export-TeamsTokens
-{
-<#
-    .SYNOPSIS
-    Exports Teams tokens from the provided Cookie database, or from current user's local database.
-
-    .DESCRIPTION
-    Exports Teams tokens from the provided Cookie database, or from current user's local database.
-    The Teams Cookies database is SQLite database.
-
-    .PARAMETER CookieDatabase
-    Full name of the Teams cookie database. If not provided, uses current user's database.
-
-    .PARAMETER AddToCache
-    Adds the tokens to AADInternals token cache
-
-    .PARAMETER CopyToClipboard
-    Copies the tokens to clipboard as JSON string
-
-    .EXAMPLE
-    PS\:>Export-AADIntTeamsTokens
-    User: user@company.com
-
-    Name                           Value                                                     
-    ----                           -----                                                     
-    office_access_token            eyJ0eXAiOiJKV1QiLCJub25jZSI6InlsUjJWRmp4SWFqeVVqeklZa3R...
-    skypetoken_asm                 eyJhbGciOiJSUzI1NiIsImtpZCI6IjEwNiIsIng1dCI6Im9QMWFxQnl...
-    authtoken                      eyJ0eXAiOiJKV1QiLCJub25jZSI6InpsUFY2bnRCUDR5NTFLTkNQR2l...
-    SSOAUTHCOOKIE                  eyJ0eXAiOiJKV1QiLCJub25jZSI6Ik5sbHJiaFlzYl9rVnU3VzVSa01...
-
-    .EXAMPLE
-    PS\:>Export-AADIntTeamsTokens -CookieDatabase C:\Cookies
-    User: user@company.com
-
-    Name                           Value                                                     
-    ----                           -----                                                     
-    office_access_token            eyJ0eXAiOiJKV1QiLCJub25jZSI6InlsUjJWRmp4SWFqeVVqeklZa3R...
-    skypetoken_asm                 eyJhbGciOiJSUzI1NiIsImtpZCI6IjEwNiIsIng1dCI6Im9QMWFxQnl...
-    authtoken                      eyJ0eXAiOiJKV1QiLCJub25jZSI6InpsUFY2bnRCUDR5NTFLTkNQR2l...
-    SSOAUTHCOOKIE                  eyJ0eXAiOiJKV1QiLCJub25jZSI6Ik5sbHJiaFlzYl9rVnU3VzVSa01...
-
-    .EXAMPLE
-    PS\:>Export-AADIntTeamsTokens -AddToCache
-    User: user@company.com
-
-    3 access tokens added to cache
-
-    .EXAMPLE
-    PS\:>Export-AADIntTeamsTokens -AddToCache -CopyToClipboard
-    User: user@company.com
-
-    3 access tokens added to cache
-    4 access tokens copied to clipboard
-
-    .EXAMPLE
-    PS\:>Export-AADIntTeamsTokens -CopyToClipboard
-    User: user@company.com
-
-    4 access tokens copied to clipboard
-
-#>
-    [cmdletbinding()]
-    Param(
-        [switch]$AddToCache,
-        [switch]$CopyToClipboard,
-        [String]$CookieDatabase
-    )
-    Begin
-    {
-    }
-    Process
-    {
-        # Set the path if database was not provided, depends on the OS we are running.
-        if([string]::IsNullOrEmpty($CookieDatabase))
-        {
-            switch([system.environment]::OSversion.Platform)
-            {
-                ("Linux")
-                {
-                    $CookieDatabase="~/.config/Microsoft/Microsoft Teams/Cookies"
-                    break
-                }
-                ("Unix")
-                {
-                    $CookieDatabase="~/Library/Application Support/Microsoft/Teams/Cookies"
-                    break
-                }
-                default # Defaults to Windows
-                {
-                    $CookieDatabase="$env:APPDATA\Microsoft\Teams\Cookies"
-                    break
-                }
-
-            }
-        }
-
-        # Test whether the cookie database exists
-        if(-not (Test-Path $CookieDatabase))
-        {
-            Throw "The Cookie database does not exist: $CookieDatabase"
-        }
-
-        try
-        {
-            # Parse the database
-            Write-Verbose "Loading and parsing database $CookieDataBase"
-            $parsedDb = Parse-SQLiteDatabase -Data (Get-BinaryContent -Path $CookieDatabase)
-
-            Write-Verbose "Looking for tokens"
-            $access_tokens = [ordered]@{}
-            foreach($page in $parsedDb.Pages)
-            {
-                # Cookies data is stored on Table Leaf
-                if($page.PageType -eq "Table Leaf" -and $page.CellsOnPage -gt 0)
-                {
-                    # Which has exactly 19 columns (the last is empty)
-                    if($page.Cells[0].Payload.Count -ge 19)
-                    {
-                        Write-Verbose "Found Table Leaf page with $($page.CellsOnPage) cells"
-                        <# Columns - updated Oct 20th 2022
-                         0: creation_utc
-                         1: top_frame_site_key
-                         2: host_key
-                         3: name
-                         4: value
-                         5: encrypted_value
-                         6: path
-                         7: expires_utc
-                         8: is_secure
-                         9: is_httponly
-                        10: last_access_utc
-                        12: has_expires
-                        13: is_persistent
-                        14: priority
-                        15: encrypted_value
-                        16: samesite
-                        17: source_scheme
-                        18: source_port
-                        19: is_same_party
-                        #>
-                        foreach($cell in $page.Cells)
-                        {
-                            $name  = $cell.Payload[3]
-                            $value = $cell.Payload[4]
-
-                            if($name -like "*token*" -or $name -eq "SSOAUTHCOOKIE")
-                            {
-                                # Strip the Bearer= and query parameters from the "authToken"
-                                if($name -eq "authToken")
-                                {
-                                    $value = [System.Net.WebUtility]::UrlDecode($value).Split("=")[1].Split("&")[0]
-                                    $userName = (Read-AccessToken -AccessToken $value).upn
-                                }
-
-                                # Add access tokens to cache as needed
-                                if($AddToCache -and $name -ne "skypetoken_asm")
-                                {
-                                    Add-AccessTokenToCache -AccessToken $value | Out-Null
-                                    $cached += 1
-                                }
-                                $access_tokens[$name] = $value
-                            }
-                        }
-                    }
-                }
-            }
-
-        
-        
-            # Print out the username
-            Write-Host "User: $userName"
-
-            # Print count cached tokens
-            if($AddToCache)
-            {
-                Write-Host "$cached access tokens added to cache"
-            }
-
-            # Copy tokens to clipboard and print the count
-            if($CopyToClipboard)
-            {
-                $access_tokens | ConvertTo-Json | Set-Clipboard
-                Write-Host "$($access_tokens.Count) access tokens copied to clipboard"
-            }
-
-            # Return
-            if(-not $AddToCache -and -not $CopyToClipboard)
-            {
-                return $access_tokens
-            }
-        }
-        catch
-        {
-            Throw $_
-        }
-    }
-}
-
-# Exports Azure CLI access tokens from the msal_token_cache.bin cache
-# Sep 29th 2022
-function Export-AzureCliTokens
-{
-<#
-    .SYNOPSIS
-    Exports Azure CLI access tokens from the msal_token_cache.bin cache.
-
-    .DESCRIPTION
-    Exports Azure CLI access tokens from the msal_token_cache.bin cache. 
-    msal_token_cache.bin is a json file protected with DPAPI in LocalUser context.
-
-    .PARAMETER MSALCache
-    Full name of the MSAL token cache. If not provided, uses msal_token_cache.bin from current user's profile under .Azure
-
-    .PARAMETER AddToCache
-    Adds the tokens to AADInternals token cache
-
-    .PARAMETER CopyToClipboard
-    Copies the tokens to clipboard as JSON string
-
-    .EXAMPLE
-    PS\:>Export-AADIntAzureCliTokens
-    Users: user@company.com,user2@company.com
-
-    UserName          access_token                                                                  
-    --------          ------------                                                                  
-    user@company.com  eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-    user@company.com  eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-    user2@company.com eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-    user2@company.com eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-
-    .EXAMPLE
-    PS\:>Export-AADIntAzureCliTokens -MSALCache "C:\Users\user\.Azure\msal_token_cache.bin.old"
-    Users: user@company.com,user2@company.com
-
-    UserName          access_token                                                                  
-    --------          ------------                                                                  
-    user@company.com  eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-    user@company.com  eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-    user2@company.com eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-    user2@company.com eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-
-    .EXAMPLE
-    PS\:>Export-AADIntAzureCliTokens -AddToCache
-    Users: user@company.com,user2@company.com
-
-    4 access tokens added to cache
-
-    .EXAMPLE
-    PS\:>Export-AADIntAzureCliTokens -AddToCache -CopyToClipboard
-    Users: user@company.com,user2@company.com
-
-    4 access tokens added to cache
-    4 access tokens copied to clipboard
-
-    .EXAMPLE
-    PS\:>Export-AADIntAzureCliTokens -CopyToClipboard
-    Users: user@company.com,user2@company.com
-
-    4 access tokens copied to clipboard
-#>
-    [cmdletbinding()]
-    Param(
-        [switch]$AddToCache,
-        [switch]$CopyToClipboard,
-        [switch]$DPAPI,
-        [String]$MSALCache
-    )
-    Begin
-    {
-        # Load system.security assembly
-        Add-Type -AssemblyName System.Security
-    }
-    Process
-    {
-        # Parses the object definition string
-        # Sep 29th 2022
-        function Parse-ObjectDefinition
-        {
-            Param(
-                [Parameter(Mandatory=$True)]
-                [String]$Definition
-            )
-            Process
-            {
-                # Get the array
-                $Definition = $Definition.Substring($Definition.IndexOf("@"))
-
-                # Get the string between @{ and }
-                $Definition = $Definition.Substring(2,$Definition.Length-3)
-
-                $attributes = [ordered]@{}
-                if(-not [string]::IsNullOrEmpty($Definition))
-                {
-                    # Split to array of name=value pairs
-                    $properties = $Definition.Split("; ")
-
-                    # Loop through the properties
-                    foreach($property in $properties)
-                    {
-                        # Split & add to attributes
-                        $parts = $property.Split("=")
-                        if(-not [string]::IsNullOrEmpty($parts[0]))
-                        {
-                            $attributes[$parts[0]] = $parts[1]
-                        }
-                    }
-                }
-
-                return New-Object -TypeName psobject -Property $attributes
-            }
-        }
-
-        # Set the path if database was not provided, depends on the OS we are running.
-        if([string]::IsNullOrEmpty($MSALCache))
-        {
-            switch([system.environment]::OSversion.Platform)
-            {
-                ("Linux")
-                {
-                    $MSALCache="~/.azure/msal_token_cache.json"
-                    break
-                }
-                ("Unix")
-                {
-                    $MSALCache="~/.azure/msal_token_cache.json"
-                    break
-                }
-                default # Defaults to Windows
-                {
-                    $MSALCache="$env:HOMEDRIVE$env:HOMEPATH\.Azure\msal_token_cache.bin"
-                    $DPAPI = $true
-                    break
-                }
-            }
-        }
-
-        # Test whether the MSAL cache exists
-        if(-not (Test-Path $MSALCache))
-        {
-            Throw "The MSAL token cache does not exist: $MSALCache"
-        }
-
-        try
-        {
-            Write-Verbose "Loading and parsing cache $MSALCache"
-            # Unprotect the token cache
-            if($DPAPI)
-            {
-                $decTokens = Get-BinaryContent $MSALCache
-                $tokens = [text.encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect($decTokens,$null,'CurrentUser'))
-            }
-            else
-            {
-                $tokens  = Get-Content $MSALCache -Encoding UTF8
-            }
-
-            
-            $objTokens = $tokens | ConvertFrom-Json
-
-            $users = [ordered]@{}
-            foreach($account in ($objtokens.Account | Get-Member -MemberType NoteProperty))
-            {
-                # Need to parse the definition manually :(
-                $properties = Parse-ObjectDefinition -Definition $account.Definition
-                $users[$properties.home_account_id] = $properties.username
-            }
-
-            Write-Verbose "Found tokens for $($users.Count) users"
-
-
-            Write-Verbose "Looking for tokens"
-            $access_tokens = @()
-            foreach($access_token in ($objtokens.AccessToken | Get-Member -MemberType NoteProperty))
-            {
-                Write-Verbose "Parsing access token $($access_token.name)"
-                # Need to parse the definition manually :(
-                $at_properties = Parse-ObjectDefinition -Definition $access_token.Definition
-
-                # Get the refresh token and parse properties if found
-                $rt_properties = $null
-                $tenantId = $at_properties.home_account_id.Split(".")[1]
-                $rt_name = $access_token.name.Replace("accesstoken","refreshtoken").Replace("-organizations-","--").Replace("-$tenantId-","--")
-                $refresh_token = $objtokens.RefreshToken | Get-Member -Name $rt_name
-
-                if($refresh_token)
-                {
-                    Write-Verbose "Parsing refresh token $rt_name"
-                    $rt_properties = Parse-ObjectDefinition -Definition $refresh_token.Definition
-                }
-
-                # Form the return object
-                $attributes = [ordered]@{
-                    "UserName"      = $users[$at_properties.home_account_id]
-                    "access_token"  = $at_properties.secret
-                    "refresh_token" = $rt_properties.secret
-                }
-                
-                if($AddToCache)
-                {
-                    Add-AccessTokenToCache -AccessToken $at_properties.secret -RefreshToken $rt_properties.secret | Out-Null
-                }
-                $access_tokens += New-Object psobject -Property $attributes
-            }
-
-            # Print out the usernames
-            Write-Host "Users: $($users.Values -Join ",")"
-
-            # Print count cached tokens
-            if($AddToCache)
-            {
-                Write-Host "$($access_tokens.Count) access tokens added to cache."
-                Write-Host "Note: AADInternals only stores tokens for one user! The token of last added user is used."
-            }
-
-            # Copy tokens to clipboard and print the count
-            if($CopyToClipboard)
-            {
-                $access_tokens | ConvertTo-Json | Set-Clipboard
-                Write-Host "$($access_tokens.Count) access tokens copied to clipboard"
-            }
-
-            # Return
-            if(-not $AddToCache -and -not $CopyToClipboard)
-            {
-                return $access_tokens
-            }
-        }
-        catch
-        {
-            Throw $_
-        }
-    }
-}
-
-# Exports access tokens from the Token Broker cache
-# Oct 20th 2022
-function Export-TokenBrokerTokens
-{
-<#
-    .SYNOPSIS
-    Exports access tokens from the Token Broker cache.
-
-    .DESCRIPTION
-    Exports access tokens from the Token Broker cache. 
-
-    .PARAMETER AddToCache
-    Adds the tokens to AADInternals token cache
-
-    .PARAMETER CopyToClipboard
-    Copies the tokens to clipboard as JSON string
-
-    .EXAMPLE
-    PS\:>Export-AADIntTokenBrokerTokens
-    Users: user@company.com,user2@company.com
-
-    UserName          access_token                                                                  
-    --------          ------------                                                                  
-    user@company.com  eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-    user@company.com  eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-    user2@company.com eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-    user2@company.com eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IjJaUXBKM1VwYmpBWVhZR2FYRUpsOGx...
-
-    .EXAMPLE
-    PS\:>Export-AADIntTokenBrokerTokens -AddToCache
-    Users: user@company.com,user2@company.com
-
-    4 access tokens added to cache
-
-    .EXAMPLE
-    PS\:>Export-AADIntTokenBrokerTokens -AddToCache -CopyToClipboard
-    Users: user@company.com,user2@company.com
-
-    4 access tokens added to cache
-    4 access tokens copied to clipboard
-
-    .EXAMPLE
-    PS\:>Export-AADIntTokenBrokerTokens -CopyToClipboard
-    Users: user@company.com,user2@company.com
-
-    4 access tokens copied to clipboard
-#>
-    [cmdletbinding()]
-    Param(
-        [switch]$AddToCache,
-        [switch]$CopyToClipboard
-    )
-    Begin
-    {
-        # Load system.security assembly
-        Add-Type -AssemblyName System.Security
-    }
-    Process
-    {
-        # Test whether the Token Broker cache exists
-        $TBRES = "$env:LOCALAPPDATA\Microsoft\TokenBroker\Cache\*.tbres"
-        
-        if(-not (Test-Path $TBRES))
-        {
-            Throw "The Token Broker cache does not exist: $TBRES"
-        }
-
-        $access_tokens = @()
-        $users = [ordered]@{}
-
-        # Get the cache files
-        $files = Get-Item -Path $TBRES
-        foreach($file in $files)
-        {
-            try
-            {
-                Write-Verbose "Parsing $file"
-                $data    = Get-BinaryContent -Path $file.FullName
-                $content = Parse-TBRES -Data $data
-
-                if($content.WTRes_Token -ne $null -and $content.WTRes_Token -ne "No Token")
-                {
-                    $parsedToken = Read-AccessToken -AccessToken $content.WTRes_Token
-                
-                    # Could be JWE which can't be parsed
-                    if($parsedToken)
-                    {
-                        $users[$parsedToken.oid] = $parsedToken.unique_name
-
-                        # Form the return object
-                        $attributes = [ordered]@{
-                            "UserName"      = $parsedToken.unique_name
-                            "access_token"  = $content.WTRes_Token
-                        }
-                
-                        if($AddToCache)
-                        {
-                            Add-AccessTokenToCache -AccessToken $content.WTRes_Token | Out-Null
-                        }
-                        $access_tokens += [PSCustomObject] $attributes
-                    }
-                }
-            }
-            catch
-            {
-                Write-Verbose "Got exception: $_"
-            }
-
-        }
-        
-        Write-Verbose "Found tokens for $($users.Count) users"
-
-        # Print out the usernames
-        if($users.Count -gt 0)
-        {
-            Write-Host "Users: $($users.Values -Join ",")"
-        }
-        else
-        {
-            Write-Host "No tokens found."
-        }
-
-        # Print count cached tokens
-        if($AddToCache)
-        {
-            Write-Host "$($access_tokens.Count) access tokens added to cache."
-            Write-Host "Note: AADInternals only stores tokens for one user! The token of last added user is used."
-        }
-
-        # Copy tokens to clipboard and print the count
-        if($CopyToClipboard)
-        {
-            $access_tokens | ConvertTo-Json | Set-Clipboard
-            Write-Host "$($access_tokens.Count) access tokens copied to clipboard"
-        }
-
-        # Return
-        if(-not $AddToCache -and -not $CopyToClipboard)
-        {
-            return $access_tokens
-        }
     }
 }
 
@@ -2664,8 +2130,6 @@ function Get-AuthorizationCode
         [Parameter(Mandatory=$False)]
         [string]$RefreshTokenCredential,
         [Parameter(Mandatory=$False)]
-        [string]$UserAgent="AADInternals",
-        [Parameter(Mandatory=$False)]
         [System.Management.Automation.PSCredential]$Credentials,
         [Parameter(Mandatory=$False)]
         [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate,
@@ -2676,10 +2140,109 @@ function Get-AuthorizationCode
         [Parameter(Mandatory=$False)]
         [string]$OTPSecretKey,
         [Parameter(Mandatory=$False)]
-        [string]$TAP
+        [string]$TAP,
+        [Parameter(Mandatory=$False)]
+        [string]$RedirectURI,
+        [Parameter(Mandatory=$False)]
+        [switch]$AppConsent,
+        [Parameter(Mandatory=$False)]
+        [string]$SubScope,
+        [Parameter(Mandatory=$False)]
+        [string]$ESTSAUTH,
+        [Parameter(Mandatory=$False)]
+        [switch]$DumpESTSAUTH,
+        [Parameter(Mandatory=$False)]
+        [boolean]$KMSI
     )
     Begin
     {
+        # Function for processing ADFS authentication
+        function Process-ADFSLogin
+        {
+            [cmdletbinding()]
+            Param(
+                [Parameter(Mandatory=$False)]
+                [System.Management.Automation.PSCredential]$Credentials,
+                [Parameter(Mandatory=$False)]
+                [String]$UserName,
+                [Parameter(Mandatory=$False)]
+                [Microsoft.PowerShell.Commands.WebRequestSession]$webSession,
+                [Parameter(Mandatory=$True)]
+                [String]$FederationRedirectUrl,
+                [Parameter(Mandatory=$False)]
+                [string]$SubScope
+            )
+            Process
+            {
+                # If authentication type is Federated, we must first authenticate against the identity provider
+                # to fetch SAML token and then get access token from Microsoft Online
+    
+                if($Credentials)
+                {
+                    $UserName = $Credentials.UserName
+                }
+                
+                # Only ADFS is supported
+                if(!$FederationRedirectUrl.Contains("/adfs/"))
+                {
+                    Throw "Only ADFS federation is supported."
+                }
+    
+                # Loop until we get a correct password or get CTRL+C
+                $passwordOk = $false
+                while(-not $passwordOk)
+                {
+                    # Set credentials
+                    if($Credentials)
+                    {
+                        $password = $Credentials.GetNetworkCredential().Password
+                        # Set Credentials to $null to avoid authentication loop
+                        $Credentials = $null
+                    }
+                    # Prompt for password
+                    else
+                    {
+                        $password = Read-HostPassword -Prompt "Password"
+                    }
+
+                    if($password -eq $null)
+                    {
+                        return $null
+                    }
+
+                    # Set the parameters
+                    $body = @{
+                        "UserName"   = $UserName
+                        "Kmsi"	     = ""
+                        "AuthMethod" = "FormsAuthentication"
+                        "Password"	 = $password
+                    }
+                    try 
+                    {
+                        # Authenticate
+                        $response = Invoke-WebRequest2 -Uri $FederationRedirectUrl -Method POST -Body $body -Headers $Headers -WebSession $webSession
+                        [xml]$xmlResponse = $response.content
+                        
+                        # Extract WS-Fed parameters
+                        $body=@{}
+                        foreach($input in $xmlResponse.html.body.form.input)
+                        {
+                            $body[$input.name] = $input.value
+                        }
+                        $url = "$(Get-TenantLoginUrl -SubScope $SubScope)/login.srf"
+
+                        return Invoke-WebRequest2 -Uri $url -WebSession $webSession -Method Post -MaximumRedirection 0 -ErrorAction SilentlyContinue -Body $body -Headers @{"User-Agent"="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                    }
+                    catch
+                    {
+                        $_
+                        # Failed, probably just wrong password
+                    }
+                    
+                }
+            }
+        }
+
         # Function for processing password & TAP
         function Process-Login
         {
@@ -2692,10 +2255,16 @@ function Get-AuthorizationCode
                 [Parameter(Mandatory=$True)]
                 [PSObject]$Config,
                 [Parameter(Mandatory=$False)]
-                [string]$TAP
+                [string]$TAP,
+                [Parameter(Mandatory=$False)]
+                [string]$SubScope,
+                [Parameter(Mandatory=$False)]
+                [boolean]$KMSI
             )
             Process
             {
+                $loginEndPoint = Get-TenantLoginUrl -SubScope $SubScope
+
                 # Loop until we get a correct password/TAP or get CTRL+C
                 while(-not $passwordOk)
                 {
@@ -2724,7 +2293,7 @@ function Get-AuthorizationCode
                     # Send the password/TAP
                     if($config.urlPost.startsWith("/"))
                     {
-                        $url = "https://login.microsoftonline.com$($config.urlPost)"
+                        $url = "$($loginEndPoint)$($config.urlPost)"
                     }
                     else
                     {
@@ -2740,6 +2309,10 @@ function Get-AuthorizationCode
                         "canary"     = $config.canary
                         "client_id"  = $ClientId
                     }
+                    if($KMSI)
+                    {
+                        $body["LoginOptions"] = 1
+                    }
                     if($isTAP)
                     {
                         $body.Remove("passwd")
@@ -2749,6 +2322,16 @@ function Get-AuthorizationCode
                     $response = Invoke-WebRequest2 -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -Headers $Headers -Body $body -ErrorAction SilentlyContinue
                                         
                     $config = Parse-LoginMicrosoftOnlineComConfig -Body $response.Content
+
+                    # Return app consent stuff
+                    if($config.pgid -eq "ConvergedConsent")
+                    {
+                        return [pscustomobject]@{
+                            "MFA"      = $MFA
+                            "Config"   = $Config
+                            "Response" = $response
+                        }
+                    }
 
                     # Expired password
                     if($config.pgid -eq "ConvergedChangePassword")
@@ -2773,7 +2356,7 @@ function Get-AuthorizationCode
                                 "OldPassword"  = $password
                                 "NewPassword"  = $newPassword
                             }
-                            $url = "https://login.microsoftonline.com$($config.urlAsyncSsprBegin)"
+                            $url = "$($loginEndPoint)$($config.urlAsyncSsprBegin)"
                             $ssprResponse = Invoke-RestMethod -UseBasicParsing -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -ErrorAction SilentlyContinue -Headers $Headers -Body ($body | ConvertTo-Json) -ContentType "application/json; charset=UTF-8"
                             # SSPR POLL
                             while($ssprResponse.IsJobPending)
@@ -2784,7 +2367,7 @@ function Get-AuthorizationCode
                                     "CoupledDataCenter" = $ssprResponse.CoupledDataCenter
                                     "CoupledScaleUnit"  = $ssprResponse.CoupledScaleUnit
                                 }
-                                $url = "https://login.microsoftonline.com$($config.urlAsyncSsprPoll)"
+                                $url = "$($loginEndPoint)$($config.urlAsyncSsprPoll)"
                                 $ssprResponse = Invoke-RestMethod -UseBasicParsing -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -ErrorAction SilentlyContinue -Headers $Headers -Body ($body | ConvertTo-Json) -ContentType "application/json; charset=UTF-8"
                             }
 
@@ -2806,7 +2389,7 @@ function Get-AuthorizationCode
                             "confirmnewpasswd" = $newPassword
                             "canary"           = $config.canary
                         }
-                        $url = "https://login.microsoftonline.com$($config.urlPost)"
+                        $url = "$($loginEndPoint)$($config.urlPost)"
 
                         $response = Invoke-WebRequest2 -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -Headers $Headers -Body $body -ContentType "application/x-www-form-urlencoded" -ErrorAction SilentlyContinue
                         $config = Parse-LoginMicrosoftOnlineComConfig -Body $response.Content
@@ -2848,7 +2431,7 @@ function Get-AuthorizationCode
                             "canary"       = $config.canary
                         }
 
-                        $url = "https://login.microsoftonline.com$($config.urlPost)"
+                        $url = "$($loginEndPoint)$($config.urlPost)"
                         $response = Invoke-WebRequest2 -Uri $url -WebSession $LoginSession -Method Post -MaximumRedirection 0 -Headers $Headers -Body $body -ContentType "application/x-www-form-urlencoded" -ErrorAction SilentlyContinue
                     }
                     # Some weird redirect issue with non-edge Chrome browsers 
@@ -2868,7 +2451,40 @@ function Get-AuthorizationCode
                             # Something severe
                             if($config.strServiceExceptionMessage)
                             {
-                                throw $config.strServiceExceptionMessage
+                                # Wrong redirect URI
+                                if($config.strServiceExceptionMessage.StartsWith("AADSTS50011"))
+                                {
+                                    Write-Verbose "Invalid redirect URI, trying to get correct one"
+                                    $newRedirectURI=""
+                                    try
+                                    {
+                                        $url = "$($loginEndPoint)/common/oauth2/authorize?client_id=$ClientID&response_type=code"
+                                        $response = Invoke-WebRequest2 -Uri $url -WebSession $LoginSession -Method Get -MaximumRedirection 0 -Headers $Headers -ErrorAction SilentlyContinue
+
+                                        # Parse from the Location header
+                                        if($response.StatusCode -eq 302)
+                                        {
+                                            $newRedirectURI = $response.Headers.Location.Substring(0,$response.Headers.Location.IndexOf("?"))
+                                            Write-Verbose "Redirect URI: $newRedirectURI"
+                                            Write-Warning "Wrong RedirectURI $RedirectURI for client $ClientID."
+                                            Write-Warning "Try again with switch -RedirectURI $newRedirectURI"
+                                        }
+                                        else
+                                        {
+                                            Write-Error $config.strServiceExceptionMessage
+                                        }
+
+                                        return $null
+                                    }
+                                    catch
+                                    {
+                                        throw $config.strServiceExceptionMessage
+                                    }
+                                }
+                                else
+                                {
+                                    throw $config.strServiceExceptionMessage
+                                }
                             }
                             # Wrong password etc
                             elseif($config.sErrorCode -ne $null)
@@ -2901,7 +2517,7 @@ function Get-AuthorizationCode
                         # Ok, we got the code!
                         302
                         {
-                        $passwordOk = $true
+                            $passwordOk = $true
                         }
 
                     }
@@ -2929,13 +2545,61 @@ function Get-AuthorizationCode
             $Certificate = Load-Certificate -FileName $PfxFileName -Password $PfxPassword -Exportable
         }
 
-        # Get redirect url
-        $auth_redirect= Get-AuthRedirectUrl -ClientId $ClientId -Resource $Resource
-                        
         # Create the url
-        $loginEndPoint = "https://login.microsoftonline.com"
+        $loginEndPoint = Get-TenantLoginUrl -SubScope $SubScope
         $request_id=(New-Guid).ToString()
-        $url="$loginEndPoint/$Tenant/oauth2/authorize?resource=$Resource&client_id=$ClientId&response_type=code&redirect_uri=$auth_redirect&client-request-id=$request_id&prompt=login&scope=openid profile&response_mode=query&sso_reload=True"
+
+        # Headers
+        $headers = @{
+            "User-Agent" = Get-UserAgent
+        }
+
+        # Get redirect url
+        if([string]::IsNullOrEmpty($RedirectURI))
+        {
+            $RedirectURI = Get-AuthRedirectUrl -ClientId $ClientId -Resource $Resource
+        }
+
+        # If ESTSAUTH cookie provided, use that
+        # Ref: https://github.com/rvrsh3ll/TokenTactics/pull/9/commits/1a88fe7f01ea88731de4a23c0b3306d4ed714260 
+        if(![string]::IsNullOrEmpty($ESTSAUTH))
+        {
+            $url="$loginEndPoint/common/oauth2/authorize?resource=$Resource&client_id=$ClientId&response_type=code&redirect_uri=$RedirectURI&scope=openid"
+            $LoginSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+            $cookie = [System.Net.Cookie]::new("ESTSAUTHPERSISTENT", $ESTSAUTH)
+            $LoginSession.Cookies.Add("$loginEndPoint/", $cookie)
+            $response = Invoke-WebRequest -UseBasicParsing -Uri $url -WebSession $LoginSession -Method get -MaximumRedirection 0 -ErrorAction SilentlyContinue -Headers $Headers
+            try
+            {
+                $config = Parse-LoginMicrosoftOnlineComConfig -Body $response.Content
+                if($config.pgid -ne $null)
+                {
+                    $throwMessage = "Unable to get authorization code with ESTSAUTH cookie. Page ID = $($config.pgid). Error = $($config.strServiceExceptionMessage)"
+                }
+                else
+                {
+                    return Parse-CodeFromResponse -Response $response 
+                }
+            }
+            catch
+            {
+                $throwMessage = "Unable to get authorization code with ESTSAUTH cookie"
+            }
+
+            if($throwMessage)
+            {
+                Throw $throwMessage
+            }
+        }
+        # If getting app consent, use different url
+        elseif($AppConsent)
+        {
+            $url="$loginEndPoint/$Tenant/oauth2/authorize?client_id=$ClientId&response_type=code&sso_reload=True"
+        }
+        else
+        {
+            $url="$loginEndPoint/$Tenant/oauth2/authorize?resource=$Resource&client_id=$ClientId&response_type=code&redirect_uri=$RedirectURI&client-request-id=$request_id&prompt=login&scope=openid profile&response_mode=query&sso_reload=True"
+        }                       
 
         # Authentication Method References (AMR), "mfa" or "ngcmfa" will enforce MFA
         # Ref: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-oapx/0fc398ca-88d0-4118-ae60-c3033e396e60
@@ -2944,10 +2608,7 @@ function Get-AuthorizationCode
             $url+="&amr_values=$AMR"
         }
 
-        # Headers
-        $headers = @{
-            "User-Agent" = $UserAgent
-        }
+        
         # Set RefreshTokenCredential for device authentication
         if($RefreshTokenCredential)
         {
@@ -2976,18 +2637,12 @@ function Get-AuthorizationCode
         }
 
         # Get credential type
-        $credType = Get-CredentialType -UserName $userName -FlowToken $config.sFT -OriginalRequest $config.sCtx
-
-        # Check the credential type (managed vs federated)
-        if($credType.Credentials.FederationRedirectUrl)
-        {
-            throw "Federated identities are not supported."
-        }
+        $credType = Get-CredentialType -UserName $userName -FlowToken $config.sFT -OriginalRequest $config.sCtx -webSession $LoginSession
 
         # Check whether we are throttling
         if($credType.ThrottleStatus -eq 1)
         {
-            Throw "Requests throttled. Wait a minute and try again."
+            Write-Warning "Requests throttled. If authentication fails, wait a minute and try again."
         }
 
         # Does the user exist?
@@ -2996,114 +2651,178 @@ function Get-AuthorizationCode
             Throw "We couldn't find an account with that username." 
         }
 
-        # Ask which account to use (MSA or AAD)
-        # MSA not supported at the moment, so skip this
-        <#
-        $accountType = 0 # AAD
-        if($credType.IfExistsResult -eq 6)
-        {
-            $options = @(
-                    New-Object System.Management.Automation.Host.ChoiceDescription "&1 Work or school account"
-                    New-Object System.Management.Automation.Host.ChoiceDescription "&2 Personal account"
-                )
-            $accountType = $host.UI.PromptForChoice("Choose account","It looks like this email is used with more than one account from Microsoft. Which one do you want to use?",$options,0)
-        }
-        #>
+        # Check the credential type (managed vs federated)
+        $isFederated = ![string]::IsNullOrEmpty($credType.Credentials.FederationRedirectUrl)
 
-        # Choose authentication method
-        $authOptions = @()
-        $nAuthOption = 0
-        $pwdOption = -2
-        $cbaOption = -2
-        $tapOption = -2
-
-        # Password?
-        if($credType.Credentials.HasPassword -eq $True)
+        # Do the federated domain authentication
+        if($isFederated)
         {
-            Write-Verbose "Password enabled."
-            $pwdOption = $nAuthOption
-            $nAuthOption++
-            $authOptions += New-Object System.Management.Automation.Host.ChoiceDescription "&$nAuthOption Password" 
-            
-        }
-
-        # Temporary Access Pass (TAP)?
-        if($credType.Credentials.HasAccessPass -eq $True)
-        {
-            Write-Verbose "Temporary Access Pass enabled."
-            $tapOption = $nAuthOption
-            $nAuthOption++
-            $authOptions += New-Object System.Management.Automation.Host.ChoiceDescription "&$nAuthOption Temporary Access Pass"
-        }
-
-        # Certificate Based Authentication (CBA)?
-        if($credType.Credentials.HasCertAuth -eq $True)
-        {
-            Write-Verbose "CBA enabled."
-            if($Certificate)
+            # Create WS-Fed response
+            $response = Process-ADFSLogin -Credentials $Credentials -UserName $userName -webSession $loginSession -FederationRedirectUrl $credType.Credentials.FederationRedirectUrl -SubScope $SubScope
+           
+            switch($response.StatusCode)
             {
-                $cbaOption = $nAuthOption
-                $nAuthOption++
-                $authOptions += New-Object System.Management.Automation.Host.ChoiceDescription "&$nAuthOption Certificate"
-            }
-            else
-            {
-                Write-Verbose "No certificate provided, skipping CBA."
-            }
-        }
+                # We got an error or MFA prompt
+                200
+                {
+                    $config = Parse-LoginMicrosoftOnlineComConfig -Body $response.Content
 
-        # No supported authentication options found :(
-        if($authOptions.Count -eq 0)
-        {
-            Throw "No supported authentication options found!"
+                    # Something severe
+                    if($config.strServiceExceptionMessage)
+                    {
+                        throw $config.strServiceExceptionMessage
+                    }
+                    # Wrong password etc
+                    elseif($config.sErrorCode -ne $null)
+                    {
+                        # When using TAP for MFA, the correct error code is not returned
+                        if($config.sErrorCode -eq "InvalidAccessPass")
+                        {
+                            $AADError = "130503: Your Temporary Access Pass is incorrect. If you don't know your pass, contact your administrator."
+                        }
+                        # Get error text from Azure AD
+                        else
+                        {
+                            $AADError = Get-Error -ErrorCode $config.sErrorCode
+                        }
+                        # We don't want to loop with provided password/TAP so throw the error
+                        if($isTAP -and (-not [string]::IsNullOrEmpty($TAP)))
+                        {
+                            Throw $AADError
+                        }
+
+                        Write-Host $AADError -ForegroundColor Red
+                    }
+                    # MFA
+                    elseif($config.arrUserProofs -ne $null)
+                    {
+                        $MFA = $true
+                    }
+                }
+                # Ok, we got the code!
+                302
+                {
+                    $passwordOk = $true
+                }
+
+            }
+
+            #$config   = $loginResponse.Config
+            #$MFA      = $loginResponse.MFA
+            #$response = $loginResponse.Response
         }
-        # Just one option so use that
-        elseif($authOptions.Count -eq 1)
-        {
-            $authOption = 0
-        }
-        # If we have TAP and it's available, use that
-        elseif($tapOption -ge 0 -and -not [string]::IsNullOrEmpty($TAP))
-        {
-            $authOption = $tapOption
-        }
-        # Prompt for options
+        # Do the managed domain authentication
         else
         {
-            $authOption = $host.UI.PromptForChoice("Authentication options","Choose authentication method",[System.Management.Automation.Host.ChoiceDescription[]]$authOptions,0)
-        }
-        
-        switch($authOption)
-        {
-            $pwdOption
+            # Ask which account to use (MSA or AAD)
+            # MSA not supported at the moment, so skip this
+            <#
+            $accountType = 0 # AAD
+            if($credType.IfExistsResult -eq 6)
             {
-                $cPWD = $true
+                $options = @(
+                        New-Object System.Management.Automation.Host.ChoiceDescription "&1 Work or school account"
+                        New-Object System.Management.Automation.Host.ChoiceDescription "&2 Personal account"
+                    )
+                $accountType = $host.UI.PromptForChoice("Choose account","It looks like this email is used with more than one account from Microsoft. Which one do you want to use?",$options,0)
             }
-            $cbaOption
-            {
-                $cCBA = $true
-            }
-            $tapOption
-            {
-                $cTAP = $true
-            }
-            default
-            {
-                return $null
-            }
-        }
+            #>
 
-        # PWD & TAP
-        if($cPWD -or $cTAP)
-        {
-            $loginResponse = Process-Login -Credentials $Credentials -Config $config -IsTAP ($cTAP -eq $true) -TAP $TAP
-            if($loginResponse -eq $null)
+            # Choose authentication method
+            $authOptions = @()
+            $nAuthOption = 0
+            $pwdOption = -2
+            $cbaOption = -2
+            $tapOption = -2
+
+            # Password?
+            if($credType.Credentials.HasPassword -eq $True)
             {
-                return $null
+                Write-Verbose "Password enabled."
+                $pwdOption = $nAuthOption
+                $nAuthOption++
+                $authOptions += New-Object System.Management.Automation.Host.ChoiceDescription "&$nAuthOption Password" 
+                
             }
-            $config   = $loginResponse.Config
-            $MFA      = $loginResponse.MFA
-            $response = $loginResponse.Response
+
+            # Temporary Access Pass (TAP)?
+            if($credType.Credentials.HasAccessPass -eq $True)
+            {
+                Write-Verbose "Temporary Access Pass enabled."
+                $tapOption = $nAuthOption
+                $nAuthOption++
+                $authOptions += New-Object System.Management.Automation.Host.ChoiceDescription "&$nAuthOption Temporary Access Pass"
+            }
+
+            # Certificate Based Authentication (CBA)?
+            if($credType.Credentials.HasCertAuth -eq $True)
+            {
+                Write-Verbose "CBA enabled."
+                if($Certificate)
+                {
+                    $cbaOption = $nAuthOption
+                    $nAuthOption++
+                    $authOptions += New-Object System.Management.Automation.Host.ChoiceDescription "&$nAuthOption Certificate"
+                }
+                else
+                {
+                    Write-Verbose "No certificate provided, skipping CBA."
+                }
+            }
+
+            # No supported authentication options found :(
+            if($authOptions.Count -eq 0)
+            {
+                Throw "No supported authentication options found!"
+            }
+            # Just one option so use that
+            elseif($authOptions.Count -eq 1)
+            {
+                $authOption = 0
+            }
+            # If we have TAP and it's available, use that
+            elseif($tapOption -ge 0 -and -not [string]::IsNullOrEmpty($TAP))
+            {
+                $authOption = $tapOption
+            }
+            # Prompt for options
+            else
+            {
+                $authOption = $host.UI.PromptForChoice("Authentication options","Choose authentication method",[System.Management.Automation.Host.ChoiceDescription[]]$authOptions,0)
+            }
+            
+            switch($authOption)
+            {
+                $pwdOption
+                {
+                    $cPWD = $true
+                }
+                $cbaOption
+                {
+                    $cCBA = $true
+                }
+                $tapOption
+                {
+                    $cTAP = $true
+                }
+                default
+                {
+                    return $null
+                }
+            }
+
+            # PWD & TAP
+            if($cPWD -or $cTAP)
+            {
+                $loginResponse = Process-Login -Credentials $Credentials -Config $config -IsTAP ($cTAP -eq $true) -TAP $TAP -SubScope $SubScope -KMSI $KMSI
+                if($loginResponse -eq $null)
+                {
+                    return $null
+                }
+                $config   = $loginResponse.Config
+                $MFA      = $loginResponse.MFA
+                $response = $loginResponse.Response
+            }
         }
 
         if($MFA)
@@ -3177,7 +2896,7 @@ function Get-AuthorizationCode
             }
 
             $headers = @{
-                "User-Agent"   = $userAgent
+                "User-Agent"   = Get-UserAgent
                 "canary"       = $config.apiCanary
                 "Content-Type" = "application/json; charset=utf-8"
             }
@@ -3270,7 +2989,7 @@ function Get-AuthorizationCode
                             $url = $config.urlEndAuth
 
                             $headers = @{
-                                "User-Agent"   = $userAgent
+                                "User-Agent"   = Get-UserAgent
                                 "canary"       = $config.apiCanary
                                 "Content-Type" = "application/json; charset=utf-8"
                             }
@@ -3292,7 +3011,7 @@ function Get-AuthorizationCode
                             $url = "$($config.urlEndAuth)?authMethodId=$mfaMethod&pollCount=$p"
 
                             $headers = @{
-                                "User-Agent"     = $userAgent
+                                "User-Agent"     = Get-UserAgent
                                 "x-ms-sessionId" = $response.SessionId
                                 "x-ms-flowToken" = $response.FlowToken
                                 "x-ms-ctx"       = $response.Ctx
@@ -3304,7 +3023,7 @@ function Get-AuthorizationCode
                         {
                             # SAS/ProcessAuth
                             $headers = @{
-                                "User-Agent"   = $userAgent
+                                "User-Agent"   = Get-UserAgent
                                 "Content-Type" = "application/x-www-form-urlencoded"
                             }
 
@@ -3332,10 +3051,16 @@ function Get-AuthorizationCode
             }
         }
 
+        # Dump app consent stuff
+        if($AppConsent)
+        {
+            return $config
+        }
+
         # Some weird redirect again
         if($response.Content.Contains("https://device.login.microsoftonline.com"))
         {
-            Write-Warning "Got an error, try using another User-Agent, current is: $(Get-Setting -Setting "User-Agent")"
+            Write-Warning "Got an error, try using another User-Agent, current is: $(Get-UserAgent)"
             throw "Got unexpected redirect to https://device.login.microsoftonline.com"
         }
 
@@ -3343,13 +3068,94 @@ function Get-AuthorizationCode
         $config = Parse-LoginMicrosoftOnlineComConfig -Body $response.Content
         if($config.strServiceExceptionMessage)
         {
-            Write-Warning "Got an error, try using another User-Agent, current is: $(Get-Setting -Setting "User-Agent")"
+            Write-Warning "Got an error, try using another User-Agent, current is: $(Get-UserAgent)"
             throw $config.strServiceExceptionMessage
+        }
+        elseif($config.sErrorCode -ne $null)
+        {
+            $AADError = Get-Error -ErrorCode $config.sErrorCode
+            throw $AADError
         }
 
         $authorizationCode = Parse-CodeFromResponse -Response $response
+        
+        # Try to dump the ESTS cookies
+        if($DumpESTSAUTH)
+        {
+            $cookieName = "ESTSAUTH"
+            if($KMSI)
+            {
+                $cookieName += "PERSISTENT"
+            }
+
+            Write-Verbose "Trying to dump $cookieName cookie"
+
+            try
+            {
+                foreach($cookie in $LoginSession.Cookies.GetCookies((Get-TenantLoginUrl -SubScope $SubScope)))
+                {
+                    if($cookie.Name -eq $cookieName)
+                    {
+                        return $cookie.Value
+                    }
+                }
+            }
+            catch {}
+        }
 
         return $authorizationCode
     }
 }
 
+# May 21st 2024
+# Return tenant subscope from Open ID configuration
+function Get-TenantSubscope
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(ParameterSetName='Domain',Mandatory=$True)]
+        [String]$Domain,
+        [Parameter(ParameterSetName='Config',Mandatory=$True)]
+        [PSObject]$OpenIDConfiguration
+    )
+    Process
+    {
+        # Get Tenant Region subscope from Open ID configuration
+        if($OpenIDConfiguration -eq $null)
+        {
+            $OpenIDConfiguration = Get-OpenIDConfiguration -Domain $Domain
+        }
+
+        return $OpenIDConfiguration.tenant_region_sub_scope
+    }
+}
+
+# May 21st 2024
+# Return tenant login url based on the subscope
+function Get-TenantLoginUrl
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$false)]
+        [String]$SubScope
+    )
+    Process
+    {
+        # Use the correct url
+        switch($SubScope)
+        {
+            "DOD" # DoD
+            {
+                return "https://login.microsoftonline.us"
+            }
+            "DODCON" # GCC-High
+            {
+                return "https://login.microsoftonline.us"
+            }
+            default # Commercial/GCC
+            {
+                return "https://login.microsoftonline.com"
+            }
+        }
+    }
+}
